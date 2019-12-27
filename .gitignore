@@ -1,7 +1,9 @@
 *.exe
 *.dll
 *.txt
+*.pdb
 
+.vs/
 fonts/
 themes/
 custom/bin/

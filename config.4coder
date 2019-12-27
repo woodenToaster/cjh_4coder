@@ -16,7 +16,7 @@ use_scroll_bars = false;
 use_file_bars = true;
 use_error_highlight = true;
 use_jump_highlight = true;
-use_scope_highlight = true;
+use_scope_highlight = false;
 use_paren_helper = true;
 use_comment_keywords = true;
 lister_whole_word_backspace_when_modified = false;
@@ -45,7 +45,7 @@ indent_with_tabs = false;
 indent_width = 4;
 
 // Theme
-default_theme_name = "4coder";
+default_theme_name = "theme-handmade-hero";
 highlight_line_at_cursor = true;
 
 // Font
@@ -54,7 +54,7 @@ default_font_size = 16;
 default_font_hinting = false;
 
 // User
-user_name = "NAME";
+user_name = "chogan";
 
 // Keyboard AltGr setting
 lalt_lctrl_is_altgr = false;
