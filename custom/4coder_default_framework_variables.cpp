@@ -29,6 +29,7 @@ CUSTOM_ID(attachment, attachment_tokens);
 CUSTOM_ID(command_map, mapid_global);
 CUSTOM_ID(command_map, mapid_file);
 CUSTOM_ID(command_map, mapid_code);
+CUSTOM_ID(command_map, mapid_normal_mode);
 
 ////////////////////////////////
 

@@ -116,7 +116,7 @@
 #include "4coder_doc_commands.cpp"
 #include "4coder_docs.cpp"
 
-#include "4coder_default_hooks.cpp"
+// #include "4coder_default_hooks.cpp"
 
 #include "generated/managed_id_metadata.cpp"
 
