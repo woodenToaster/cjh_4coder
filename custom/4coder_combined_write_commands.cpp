@@ -154,10 +154,10 @@ CUSTOM_DOC("Turns uncommented lines into commented lines and vice versa for comm
     i64 pos = get_start_of_line_at_cursor(app, view, buffer);
     b32 alread_has_comment = c_line_comment_starts_at_position(app, buffer, pos);
     if (alread_has_comment){
-        buffer_replace_range(app, buffer, Ii64(pos, pos + 2), string_u8_empty);
+        buffer_replace_range(app, buffer, Ii64(pos, pos + 3), string_u8_empty);
     }
     else{
-        buffer_replace_range(app, buffer, Ii64(pos), string_u8_litexpr("//"));
+        buffer_replace_range(app, buffer, Ii64(pos), string_u8_litexpr("// "));
     }
 }
 
@@ -166,6 +166,8 @@ CUSTOM_DOC("Turns uncommented lines into commented lines and vice versa for comm
 static Snippet default_snippets[] = {
     // general (for Allen's style)
     {"if",     "if (){\n\n}\n", 4, 7},
+    {"if0",    "#if 0", 4, 4},
+    {"endif",  "#endif", 5, 5},
     {"ifelse", "if (){\n\n}\nelse{\n\n}", 4, 7},
     {"forn",   "for (node = ;\nnode != 0;\nnode = node->next){\n\n}\n", 5, 38},
     {"fori",   "for (i = 0; i < ; i += 1){\n\n}\n", 5, 16},

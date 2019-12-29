@@ -8,6 +8,7 @@
 #include <assert.h>
 
 #include "4coder_default_include.cpp"
+#include "string.h"
 
 enum CjhCommandMode
 {
@@ -86,8 +87,9 @@ CJH_START_MULTI_KEY_CMD(buffer)
 CJH_START_MULTI_KEY_CMD(file)
 CJH_START_MULTI_KEY_CMD(window)
 CJH_START_MULTI_KEY_CMD(toggle)
-CJH_START_MULTI_KEY_CMD(quit)
 CJH_START_MULTI_KEY_CMD(comma)
+CJH_START_MULTI_KEY_CMD(snippet)
+CJH_START_MULTI_KEY_CMD(quit)
 CJH_START_MULTI_KEY_CMD(g)
 CJH_START_MULTI_KEY_CMD(d)
 
@@ -156,14 +158,22 @@ static void cjh_setup_quit_mapping(Mapping *mapping, i64 quit_cmd_map_id)
 CJH_COMMAND_AND_ENTER_NORMAL_MODE(toggle_line_numbers)
 CJH_COMMAND_AND_ENTER_NORMAL_MODE(toggle_show_whitespace)
 CJH_COMMAND_AND_ENTER_NORMAL_MODE(toggle_virtual_whitespace)
+CJH_COMMAND_AND_ENTER_NORMAL_MODE(toggle_filebar)
+CJH_COMMAND_AND_ENTER_NORMAL_MODE(toggle_fps_meter)
+CJH_COMMAND_AND_ENTER_NORMAL_MODE(toggle_fullscreen)
+CJH_COMMAND_AND_ENTER_NORMAL_MODE(toggle_line_wrap)
 
 static void cjh_setup_toggle_mapping(Mapping *mapping, i64 toggle_cmd_map_id)
 {
     CJH_CMD_MAPPING_PREAMBLE(toggle_cmd_map_id);
 
+    Bind(cjh_toggle_filebar, KeyCode_B);
+    Bind(cjh_toggle_line_wrap, KeyCode_L);
     Bind(cjh_toggle_line_numbers, KeyCode_N);
-    Bind(cjh_toggle_show_whitespace, KeyCode_W);
+    Bind(cjh_toggle_fullscreen, KeyCode_S);
+    Bind(cjh_toggle_fps_meter, KeyCode_T);
     Bind(cjh_toggle_virtual_whitespace, KeyCode_V);
+    Bind(cjh_toggle_show_whitespace, KeyCode_W);
 }
 
 // Comma commands
@@ -189,6 +199,63 @@ static void cjh_setup_comma_mapping(Mapping *mapping, i64 comma_cmd_map_id)
     Bind(cjh_save, KeyCode_W);
 }
 
+// Snippet commands
+
+static void cjh_insert_snippet(Application_Links *app, char *snippet_name)
+{
+    Snippet *snippet = default_snippets;
+    bool found = false;
+    for (i32 i = 0; i < ArrayCount(default_snippets); i += 1, snippet += 1)
+    {
+        if (strcmp(snippet->name, snippet_name) == 0)
+        {
+            found = true;
+            break;
+        }
+    }
+    assert(found);
+
+    View_ID view = get_this_ctx_view(app, Access_ReadWrite);
+    Buffer_ID buffer = view_get_buffer(app, view, Access_ReadWriteVisible);
+    i64 pos = view_get_cursor_pos(app, view);
+    write_snippet(app, view, buffer, pos, snippet);
+}
+
+#define CJH_DEFINE_SNIPPET(name)                  \
+    CUSTOM_COMMAND_SIG(cjh_insert_snippet_##name) \
+    {                                             \
+        cjh_insert_snippet(app, #name);           \
+        cjh_enter_normal_mode(app);               \
+    }
+
+CJH_DEFINE_SNIPPET(if)
+CJH_DEFINE_SNIPPET(for)
+
+static bool cjh_inserting_begin_if0_comment = true;
+
+CUSTOM_COMMAND_SIG(cjh_insert_snippet_if0)
+{
+    if (cjh_inserting_begin_if0_comment)
+    {
+        cjh_insert_snippet(app, "if0");
+    }
+    else
+    {
+        cjh_insert_snippet(app, "endif");
+    }
+    cjh_inserting_begin_if0_comment = !cjh_inserting_begin_if0_comment;
+    cjh_enter_normal_mode(app);
+}
+
+static void cjh_setup_snippet_mapping(Mapping *mapping, i64 snippet_cmd_map_id)
+{
+    CJH_CMD_MAPPING_PREAMBLE(snippet_cmd_map_id);
+
+    Bind(cjh_insert_snippet_if, KeyCode_I);
+    Bind(cjh_insert_snippet_for, KeyCode_F);
+    Bind(cjh_insert_snippet_if0, KeyCode_0);
+}
+
 // D commands
 
 static void cjh_setup_d_mapping(Mapping *mapping, i64 d_cmd_map_id)
@@ -199,12 +266,13 @@ static void cjh_setup_d_mapping(Mapping *mapping, i64 d_cmd_map_id)
 
 // G commands
 CJH_COMMAND_AND_ENTER_NORMAL_MODE(goto_beginning_of_file)
+CJH_COMMAND_AND_ENTER_NORMAL_MODE(comment_line_toggle)
 
 static void cjh_setup_g_mapping(Mapping *mapping, i64 g_cmd_map_id)
 {
     CJH_CMD_MAPPING_PREAMBLE(g_cmd_map_id);
 
-    // Bind(cjh_comment_region, KeyCode_C);
+    Bind(cjh_comment_line_toggle, KeyCode_C);
     // Bind(xref-find-definitions, KeyCode_D);
     // Bind(backward-to-word, KeyCode_E);
     // Bind(cjh_open_file_at_point, KeyCode_F);
@@ -237,7 +305,7 @@ static void cjh_setup_space_mapping(Mapping *mapping, i64 space_cmd_map_id)
     Bind(cjh_start_multi_key_cmd_quit, KeyCode_Q);
     // Bind(); // " r" 'cjh-reload-init-file)
     // " ry"
-    // " s"
+    Bind(cjh_start_multi_key_cmd_snippet, KeyCode_S);
     // s/.../.../g
     Bind(cjh_start_multi_key_cmd_toggle, KeyCode_T);
     // Bind(); // " u" 'universal-argument)
@@ -565,8 +633,9 @@ custom_layer_init(Application_Links *app){
     cjh_setup_file_mapping(&framework_mapping, cjh_mapid_file);
     cjh_setup_window_mapping(&framework_mapping, cjh_mapid_window);
     cjh_setup_toggle_mapping(&framework_mapping, cjh_mapid_toggle);
-    cjh_setup_quit_mapping(&framework_mapping, cjh_mapid_quit);
     cjh_setup_comma_mapping(&framework_mapping, cjh_mapid_comma);
+    cjh_setup_snippet_mapping(&framework_mapping, cjh_mapid_snippet);
+    cjh_setup_quit_mapping(&framework_mapping, cjh_mapid_quit);
     cjh_setup_g_mapping(&framework_mapping, cjh_mapid_g);
 }
 
