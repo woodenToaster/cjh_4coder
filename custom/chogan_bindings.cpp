@@ -8,7 +8,6 @@
 #include <assert.h>
 
 #include "4coder_default_include.cpp"
-#include "4coder_default_map.cpp"
 
 enum CjhCommandMode
 {
@@ -90,6 +89,7 @@ CJH_START_MULTI_KEY_CMD(toggle)
 CJH_START_MULTI_KEY_CMD(quit)
 CJH_START_MULTI_KEY_CMD(comma)
 CJH_START_MULTI_KEY_CMD(g)
+CJH_START_MULTI_KEY_CMD(d)
 
 // Buffer commands
 CJH_COMMAND_AND_ENTER_NORMAL_MODE(kill_buffer)
@@ -184,6 +184,14 @@ static void cjh_setup_comma_mapping(Mapping *mapping, i64 comma_cmd_map_id)
     Bind(cjh_save, KeyCode_W);
 }
 
+// D commands
+
+static void cjh_setup_d_mapping(Mapping *mapping, i64 d_cmd_map_id)
+{
+    CJH_CMD_MAPPING_PREAMBLE(d_cmd_map_id);
+
+}
+
 // G commands
 CJH_COMMAND_AND_ENTER_NORMAL_MODE(goto_beginning_of_file)
 
@@ -249,6 +257,13 @@ CUSTOM_COMMAND_SIG(cjh_insert_beginning_of_line)
     cjh_enter_insert_mode(app);
 }
 
+CUSTOM_COMMAND_SIG(cjh_move_right_token_boundary)
+{
+    // TODO(cjh): Treats " and ; as part of a token. Doesn't work in comments.
+    move_right_token_boundary(app);
+    move_right(app);
+}
+
 static void cjh_setup_normal_mode_mapping(Mapping *mapping, i64 normal_mode_id)
 {
     MappingScope();
@@ -259,7 +274,7 @@ static void cjh_setup_normal_mode_mapping(Mapping *mapping, i64 normal_mode_id)
     Bind(cjh_move_right_and_enter_insert_mode, KeyCode_A);
     Bind(move_left_token_boundary, KeyCode_B);
     // Bind(cjh_change, KeyCode_C);
-    // Bind(cjh_delete, KeyCode_D);
+    Bind(cjh_start_multi_key_cmd_d, KeyCode_D);
     // TODO(cjh): Can't do multiple 'e' in a row
     Bind(cjh_move_to_end_of_word, KeyCode_E);
     // Bind(cjh_find_forward, KeyCode_F);
@@ -280,7 +295,7 @@ static void cjh_setup_normal_mode_mapping(Mapping *mapping, i64 normal_mode_id)
     Bind(undo, KeyCode_U);
     // Bind(cjh_visual_state, KeyCode_V);
     // TODO(cjh): 'w' doesn't work quite right
-    Bind(move_right_token_boundary, KeyCode_W);
+    Bind(cjh_move_right_token_boundary, KeyCode_W);
     Bind(delete_char, KeyCode_X);
     // TODO(cjh): Should start a new key map
     Bind(copy, KeyCode_Y);
