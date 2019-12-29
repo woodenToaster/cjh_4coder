@@ -716,7 +716,7 @@ draw_original_4coder_style_cursor_mark_highlight(Application_Links *app, View_ID
         i64 mark_pos = view_get_mark_pos(app, view_id);
         if (is_active_view){
             draw_character_block(app, text_layout_id, cursor_pos, roundness,
-                                 fcolor_id(defcolor_cursor));
+                                 fcolor_id(defcolor_normal_cursor));
             paint_text_color_pos(app, text_layout_id, cursor_pos,
                                  fcolor_id(defcolor_at_cursor));
             draw_character_wire_frame(app, text_layout_id, mark_pos,
@@ -729,7 +729,7 @@ draw_original_4coder_style_cursor_mark_highlight(Application_Links *app, View_ID
                                       fcolor_id(defcolor_mark));
             draw_character_wire_frame(app, text_layout_id, cursor_pos,
                                       roundness, outline_thickness,
-                                      fcolor_id(defcolor_cursor));
+                                      fcolor_id(defcolor_normal_cursor));
         }
     }
 }
@@ -749,7 +749,7 @@ draw_notepad_style_cursor_highlight(Application_Links *app, View_ID view_id,
             paint_text_color_fcolor(app, text_layout_id, range,
                              fcolor_id(defcolor_at_highlight));
         }
-        draw_character_i_bar(app, text_layout_id, cursor_pos, fcolor_id(defcolor_cursor));
+        draw_character_i_bar(app, text_layout_id, cursor_pos, fcolor_id(defcolor_insert_cursor));
     }
 }
 

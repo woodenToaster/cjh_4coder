@@ -41,16 +41,12 @@ CUSTOM_COMMAND_SIG(cjh_enter_normal_mode)
 
     cjh_command_mode = CjhCommandMode_Normal;
     cjh_set_command_map(app, cjh_mapid_normal_mode);
-    // TODO(cjh): There must be a better way. render_buffer should switch on mode
-    *active_color_table.arrays[defcolor_cursor].vals = 0xFFEEAD0E;
 }
 
 CUSTOM_COMMAND_SIG(cjh_enter_insert_mode)
 {
     cjh_command_mode = CjhCommandMode_Insert;
     cjh_set_command_map(app, mapid_code);
-    // TODO(cjh): There must be a better way.
-    *active_color_table.arrays[defcolor_cursor].vals = 0xFF66CD00;
 }
 
 #include "chogan_hooks.cpp"

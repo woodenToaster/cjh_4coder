@@ -363,7 +363,7 @@ chogan_render_buffer(Application_Links *app, View_ID view_id, Face_ID face_id,
 
     // NOTE(allen): Cursor shape
     Face_Metrics metrics = get_face_metrics(app, face_id);
-    f32 cursor_roundness = 1.0f; // (metrics.normal_advance*0.5f)*0.9f;
+    f32 cursor_roundness = 1.0f;
     f32 mark_thickness = 2.f;
 
     if (cjh_in_normal_mode())
