@@ -10,7 +10,7 @@ setup_default_mapping(Mapping *mapping, i64 global_id, i64 file_id, i64 code_id)
     SelectMapping(mapping);
     
     SelectMap(global_id);
-    BindCore(default_startup, CoreCode_Startup);
+    BindCore(chogan_default_startup, CoreCode_Startup);
     BindCore(default_try_exit, CoreCode_TryExit);
     Bind(keyboard_macro_start_recording , KeyCode_U, KeyCode_Control);
     Bind(keyboard_macro_finish_recording, KeyCode_U, KeyCode_Control, KeyCode_Shift);

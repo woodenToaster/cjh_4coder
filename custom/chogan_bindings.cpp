@@ -1,4 +1,4 @@
-// chogan_bindings.cpp - chogan customization layer.
+// chogan_bindings.cpp - customization layer.
 
 // TOP
 
@@ -28,15 +28,19 @@ static bool cjh_in_insert_mode()
     return cjh_command_mode == CjhCommandMode_Insert;
 }
 
-#include "chogan_hooks.cpp"
-
-CUSTOM_COMMAND_SIG(cjh_enter_normal_mode)
+static void cjh_set_command_map(Application_Links *app, Command_Map_ID new_mapid)
 {
-    cjh_command_mode = CjhCommandMode_Normal;
     Buffer_ID buffer_id = view_get_buffer(app, get_active_view(app, Access_ReadVisible), Access_ReadVisible);
     Managed_Scope scope = buffer_get_managed_scope(app, buffer_id);
     Command_Map_ID* map_id_ptr = scope_attachment(app, scope, buffer_map_id, Command_Map_ID);
-    *map_id_ptr = mapid_normal_mode;
+    *map_id_ptr = new_mapid;
+}
+
+CUSTOM_COMMAND_SIG(cjh_enter_normal_mode)
+{
+
+    cjh_command_mode = CjhCommandMode_Normal;
+    cjh_set_command_map(app, cjh_mapid_normal_mode);
     // TODO(cjh): There must be a better way. render_buffer should switch on mode
     *active_color_table.arrays[defcolor_cursor].vals = 0xFFEEAD0E;
 }
@@ -44,15 +48,14 @@ CUSTOM_COMMAND_SIG(cjh_enter_normal_mode)
 CUSTOM_COMMAND_SIG(cjh_enter_insert_mode)
 {
     cjh_command_mode = CjhCommandMode_Insert;
-    Buffer_ID buffer_id = view_get_buffer(app, get_active_view(app, Access_ReadVisible), Access_ReadVisible);
-    Managed_Scope scope = buffer_get_managed_scope(app, buffer_id);
-    Command_Map_ID* map_id_ptr = scope_attachment(app, scope, buffer_map_id, Command_Map_ID);
-    *map_id_ptr = mapid_code;
+    cjh_set_command_map(app, mapid_code);
     // TODO(cjh): There must be a better way.
     *active_color_table.arrays[defcolor_cursor].vals = 0xFF66CD00;
 }
 
-CUSTOM_COMMAND_SIG(cjh_move_forward_and_enter_insert_mode)
+#include "chogan_hooks.cpp"
+
+CUSTOM_COMMAND_SIG(cjh_move_right_and_enter_insert_mode)
 {
     move_right(app);
     cjh_enter_insert_mode(app);
@@ -64,14 +67,200 @@ CUSTOM_COMMAND_SIG(cjh_move_to_end_of_word)
     move_left(app);
 }
 
+#define CJH_START_MULTI_KEY_CMD(category)                  \
+    CUSTOM_COMMAND_SIG(cjh_start_multi_key_cmd_##category) \
+    {                                                      \
+        cjh_set_command_map(app, cjh_mapid_##category);    \
+    }
+
+#define CJH_COMMAND_AND_ENTER_NORMAL_MODE(cmd) \
+    CUSTOM_COMMAND_SIG(cjh_##cmd)              \
+    {                                          \
+        cmd(app);                              \
+        cjh_enter_normal_mode(app);            \
+    }
+
+#define CJH_CMD_MAPPING_PREAMBLE(cmd_map_id)        \
+    MappingScope();                                 \
+    SelectMapping(mapping);                         \
+    SelectMap(cmd_map_id);                          \
+    Bind(cjh_enter_normal_mode, KeyCode_Escape)
+
+CJH_START_MULTI_KEY_CMD(space)
+CJH_START_MULTI_KEY_CMD(buffer)
+CJH_START_MULTI_KEY_CMD(file)
+CJH_START_MULTI_KEY_CMD(window)
+CJH_START_MULTI_KEY_CMD(toggle)
+CJH_START_MULTI_KEY_CMD(quit)
+CJH_START_MULTI_KEY_CMD(comma)
+CJH_START_MULTI_KEY_CMD(g)
+
+// Buffer commands
+CJH_COMMAND_AND_ENTER_NORMAL_MODE(kill_buffer)
+CJH_COMMAND_AND_ENTER_NORMAL_MODE(interactive_switch_buffer)
+
+static void cjh_setup_buffer_mapping(Mapping *mapping, i64 buffer_cmd_map_id)
+{
+    CJH_CMD_MAPPING_PREAMBLE(buffer_cmd_map_id);
+
+    Bind(cjh_interactive_switch_buffer, KeyCode_B);
+    // Bind( , KeyCode_B, KeyCode_Shift); // " bB" 'ido-switch-buffer-other-window)
+    Bind(cjh_kill_buffer, KeyCode_D);
+    // Bind( , KeyCode_D, KeyCode_Shift ); // " bD" 'clean-buffer-list)
+    // Bind( , KeyCode_P); // " bp" 'previous-buffer)
+    // Bind( , KeyCode_N); // " bn" 'next-buffer)
+}
+
+// Window (panel) commands
+CJH_COMMAND_AND_ENTER_NORMAL_MODE(close_panel)
+CJH_COMMAND_AND_ENTER_NORMAL_MODE(change_active_panel_backwards)
+CJH_COMMAND_AND_ENTER_NORMAL_MODE(change_active_panel)
+CJH_COMMAND_AND_ENTER_NORMAL_MODE(open_panel_vsplit)
+CJH_COMMAND_AND_ENTER_NORMAL_MODE(swap_panels)
+
+static void cjh_setup_window_mapping(Mapping *mapping, i64 window_cmd_map_id)
+{
+    CJH_CMD_MAPPING_PREAMBLE(window_cmd_map_id);
+
+    Bind(cjh_close_panel, KeyCode_D);
+    Bind(cjh_change_active_panel, KeyCode_H);
+    Bind(cjh_change_active_panel, KeyCode_L);
+    Bind(cjh_open_panel_vsplit, KeyCode_ForwardSlash);
+    Bind(cjh_swap_panels, KeyCode_L, KeyCode_Shift);
+    Bind(cjh_swap_panels, KeyCode_H, KeyCode_Shift);
+}
+
+// File commands
+CJH_COMMAND_AND_ENTER_NORMAL_MODE(interactive_open_or_new)
+CJH_COMMAND_AND_ENTER_NORMAL_MODE(open_in_other)
+
+static void cjh_setup_file_mapping(Mapping *mapping, i64 file_cmd_map_id)
+{
+    CJH_CMD_MAPPING_PREAMBLE(file_cmd_map_id);
+
+    Bind(cjh_interactive_open_or_new, KeyCode_F);
+    Bind(cjh_open_in_other, KeyCode_F, KeyCode_Shift);
+    // Bind(, KeyCode_R); " fr" 'ido-find-file-read-only)
+    // Bind(, KeyCode_R, KeyCode_Shift); " fR" 'cjh-rename-file)
+}
+
+static void cjh_setup_quit_mapping(Mapping *mapping, i64 quit_cmd_map_id)
+{
+    CJH_CMD_MAPPING_PREAMBLE(quit_cmd_map_id);
+
+    Bind(exit_4coder, KeyCode_Q);
+}
+
+// Toggle commands
+CJH_COMMAND_AND_ENTER_NORMAL_MODE(toggle_line_numbers)
+CJH_COMMAND_AND_ENTER_NORMAL_MODE(toggle_show_whitespace)
+CJH_COMMAND_AND_ENTER_NORMAL_MODE(toggle_virtual_whitespace)
+
+static void cjh_setup_toggle_mapping(Mapping *mapping, i64 toggle_cmd_map_id)
+{
+    CJH_CMD_MAPPING_PREAMBLE(toggle_cmd_map_id);
+
+    Bind(cjh_toggle_line_numbers, KeyCode_N);
+    Bind(cjh_toggle_show_whitespace, KeyCode_W);
+    Bind(cjh_toggle_virtual_whitespace, KeyCode_V);
+}
+
+// Comma commands
+CJH_COMMAND_AND_ENTER_NORMAL_MODE(build_in_build_panel)
+CJH_COMMAND_AND_ENTER_NORMAL_MODE(save)
+CJH_COMMAND_AND_ENTER_NORMAL_MODE(write_note)
+CJH_COMMAND_AND_ENTER_NORMAL_MODE(write_todo)
+
+static void cjh_setup_comma_mapping(Mapping *mapping, i64 comma_cmd_map_id)
+{
+    CJH_CMD_MAPPING_PREAMBLE(comma_cmd_map_id);
+
+    Bind(cjh_build_in_build_panel, KeyCode_B);
+    // Bind(); ",c" 'cjh-insert-if0-comment)
+    // Bind(); ",f" 'fill-paragraph)
+    // Bind(); ",gb" 'c-beginning-of-defun)
+    // Bind(); ",ge" 'c-end-of-defun)
+    // Bind(); ",mf" 'mark-defun)
+    Bind(cjh_write_note, KeyCode_N);
+    // Bind(); r" 'recompile)
+    // Bind(); ",si" 'cjh-wrap-region-in-if)
+    Bind(cjh_write_todo, KeyCode_T);
+    Bind(cjh_save, KeyCode_W);
+}
+
+// G commands
+CJH_COMMAND_AND_ENTER_NORMAL_MODE(goto_beginning_of_file)
+
+static void cjh_setup_g_mapping(Mapping *mapping, i64 g_cmd_map_id)
+{
+    CJH_CMD_MAPPING_PREAMBLE(g_cmd_map_id);
+
+    // Bind(cjh_comment_region, KeyCode_C);
+    // Bind(xref-find-definitions, KeyCode_D);
+    // Bind(backward-to-word, KeyCode_E);
+    // Bind(cjh_open_file_at_point, KeyCode_F);
+    Bind(cjh_goto_beginning_of_file, KeyCode_G);
+}
+
+static void cjh_setup_space_mapping(Mapping *mapping, i64 space_cmd_map_id)
+{
+    CJH_CMD_MAPPING_PREAMBLE(space_cmd_map_id);
+
+    // " a"
+    Bind(cjh_start_multi_key_cmd_buffer, KeyCode_B);
+    // " c"
+    // Bind(); // " d" 'dired)
+    // Bind(); // " en" 'compilation-next-error-function)
+    Bind(cjh_start_multi_key_cmd_file, KeyCode_F);
+    // Bind(); // " gg" 'goto-line)
+    // " i"
+    // Bind(); // " jw" 'ace-jump-word-mode)
+    // Bind(); // " jc" 'ace-jump-char-mode)
+    // Bind(); // " jl" 'ace-jump-line-mode))
+    // " k"
+
+    // Bind(); // " ls" 'window-configuration-to-register)
+    // Bind(); // " ll" 'jump-to-register)
+    // " m"
+    // " n"
+    // " o"
+    // " p"
+    Bind(cjh_start_multi_key_cmd_quit, KeyCode_Q);
+    // Bind(); // " r" 'cjh-reload-init-file)
+    // " ry"
+    // " s"
+    // s/.../.../g
+    Bind(cjh_start_multi_key_cmd_toggle, KeyCode_T);
+    // Bind(); // " u" 'universal-argument)
+    // " v"
+    Bind(cjh_start_multi_key_cmd_window, KeyCode_W);
+    // " x"
+    // " y"
+    // " z"
+    // " /" project wide search
+    // Bind(); // " \t" 'cjh-toggle-prev-buffer)
+}
+
+CUSTOM_COMMAND_SIG(cjh_eol_insert)
+{
+    seek_end_of_line(app);
+    cjh_enter_insert_mode(app);
+}
+
+CUSTOM_COMMAND_SIG(cjh_insert_beginning_of_line)
+{
+    seek_beginning_of_textual_line(app);
+    cjh_enter_insert_mode(app);
+}
+
 static void cjh_setup_normal_mode_mapping(Mapping *mapping, i64 normal_mode_id)
 {
     MappingScope();
     SelectMapping(mapping);
     SelectMap(normal_mode_id);
 
-
-    Bind(cjh_move_forward_and_enter_insert_mode, KeyCode_A);
+    // a-z
+    Bind(cjh_move_right_and_enter_insert_mode, KeyCode_A);
     Bind(move_left_token_boundary, KeyCode_B);
     // Bind(cjh_change, KeyCode_C);
     // Bind(cjh_delete, KeyCode_D);
@@ -79,6 +268,7 @@ static void cjh_setup_normal_mode_mapping(Mapping *mapping, i64 normal_mode_id)
     Bind(cjh_move_to_end_of_word, KeyCode_E);
     // Bind(cjh_find_forward, KeyCode_F);
     Bind(move_left, KeyCode_H);
+    Bind(cjh_start_multi_key_cmd_g, KeyCode_G);
     Bind(cjh_enter_insert_mode, KeyCode_I);
     Bind(move_down, KeyCode_J);
     Bind(move_up, KeyCode_K);
@@ -91,54 +281,65 @@ static void cjh_setup_normal_mode_mapping(Mapping *mapping, i64 normal_mode_id)
     // Bind(cjh_replace_char, KeyCode_R);
     // Bind(kmacro_start_macro_or_insert_counter, KeyCode_S);
     // Bind(cjh_find_forward_till, KeyCode_T);
-    // Bind(undo, KeyCode_U);
+    Bind(undo, KeyCode_U);
     // Bind(cjh_visual_state, KeyCode_V);
-    // TODO(cjh): Not really happy with 'w' behavior
+    // TODO(cjh): 'w' doesn't work quite right
     Bind(move_right_token_boundary, KeyCode_W);
-    // Bind(cjh_forward_delete_char, KeyCode_X);
+    Bind(delete_char, KeyCode_X);
+    // TODO(cjh): Should start a new key map
     Bind(copy, KeyCode_Y);
-    // z
+    // Bind(AVAILABLE, KeyCode_Z);
+
+    Bind(cjh_start_multi_key_cmd_space, KeyCode_Space);
+    Bind(cjh_start_multi_key_cmd_comma, KeyCode_Comma);
+
+    // A-Z
+    Bind(cjh_eol_insert, KeyCode_A, KeyCode_Shift);
+    Bind(move_left_whitespace_boundary, KeyCode_B, KeyCode_Shift);
+    // Bind(cjh-change-to-eol, KeyCode_C, KeyCode_Shift);
+    Bind(delete_line, KeyCode_D, KeyCode_Shift);
+    // Bind(AVAILABLE, KeyCode_E, KeyCode_Shift);
+    // Bind(cjh-find-backward, KeyCode_F, KeyCode_Shift);
+    Bind(goto_end_of_file, KeyCode_G, KeyCode_Shift);
+    // Bind(AVAILABLE, KeyCode_H, KeyCode_Shift);
+    Bind(cjh_insert_beginning_of_line, KeyCode_I, KeyCode_Shift);
+    // Bind(cjh-delete-indentation, KeyCode_J, KeyCode_Shift);
+    // Bind(kmacro-end-or-call-macro, KeyCode_K, KeyCode_Shift);
+    // Bind(AVAILABLE, KeyCode_L, KeyCode_Shift);
+    // Bind(move-to-window-line-top-bottom, KeyCode_M, KeyCode_Shift);
+    // Bind(cjh-isearch-prev, KeyCode_N, KeyCode_Shift);
+    // Bind(cjh-open-newline-above, KeyCode_O, KeyCode_Shift);
+    // Bind(AVAILABLE, KeyCode_P, KeyCode_Shift);
+    // Bind(AVAILABLE, KeyCode_Q, KeyCode_Shift);
+    // Bind(AVAILABLE, KeyCode_R, KeyCode_Shift);
+    // Bind(AVAILABLE, KeyCode_S, KeyCode_Shift);
+    // Bind(cjh-find-backward-till, KeyCode_T, KeyCode_Shift);
+    // Bind(AVAILABLE, KeyCode_U, KeyCode_Shift);
+    // Bind(cjh-start-visual-line-selection, KeyCode_V, KeyCode_Shift);
+    Bind(move_right_whitespace_boundary, KeyCode_W, KeyCode_Shift);
+    Bind(backspace_char, KeyCode_X, KeyCode_Shift);
+    // Bind(AVAILABLE, KeyCode_Y, KeyCode_Shift);
+    // Bind(AVAILABLE, KeyCode_Z, KeyCode_Shift);
+
+
+    // Shift-<special-characters>
+    Bind(seek_end_of_line, KeyCode_4, KeyCode_Shift);
+    // Bind( , KeyCode_OpenBracket, KeyCode_Shift); "{" 'backward-paragraph)
+    // Bind( , KeyCode_CloseBracket, KeyCode_Shift); "}" 'forward-paragraph)
+    // Bind( , KeyCode_OpenBracket); "[ " 'cjh-newline-above)
+    // Bind( , KeyCode_CloseBracket); "] " 'cjh-newline-below)
+
+    // Control-<a-z>
+    // TODO(cjh): Put the cursor in the middle of the screen
+    Bind(page_down, KeyCode_D, KeyCode_Control);
+    Bind(page_up, KeyCode_U, KeyCode_Control);
 
 #if 0
-(define-key cjh-keymap "gc" 'cjh-comment-region)
-(define-key cjh-keymap "gd" 'xref-find-definitions)
-(define-key cjh-keymap "ge" 'backward-to-word)
-(define-key cjh-keymap "gg" 'beginning-of-buffer)
-
-(define-key cjh-keymap "A" 'cjh-eol-insert)
-(define-key cjh-keymap "B" 'cjh-backward-whitespace)
-(define-key cjh-keymap "C" 'cjh-change-to-eol)
-(define-key cjh-keymap "D" 'kill-line)
-;; E
-(define-key cjh-keymap "F" 'cjh-find-backward)
-(define-key cjh-keymap "G" 'end-of-buffer)
-;; H
-(define-key cjh-keymap "I" 'cjh-insert-beginning-of-line)
-(define-key cjh-keymap "J" 'cjh-delete-indentation)
-(define-key cjh-keymap "K" 'kmacro-end-or-call-macro)
-;; L
-(define-key cjh-keymap "M" 'move-to-window-line-top-bottom)
-(define-key cjh-keymap "N" 'cjh-isearch-prev)
-(define-key cjh-keymap "O" 'cjh-open-newline-above)
-;; P
-;; Q
-;; R
-;; S
-;; TODO(chogan): Implement this
-(define-key cjh-keymap "T" 'cjh-find-backward-till)
-;; U
-;; TODO(chogan): Not quite right
-(define-key cjh-keymap "V" 'cjh-start-visual-line-selection)
-(define-key cjh-keymap "W" 'cjh-forward-whitespace)
-(define-key cjh-keymap "X" 'cjh-backward-delete-char)
-;; Y
-;; Z
 ;; ~
 ;; `
 ;; !
 ;; @
 ;; #
-(define-key cjh-keymap "$" 'cjh-move-to-end-of-line)
 (define-key cjh-keymap "%" 'cjh-matching-paren)
 (define-key cjh-keymap "^" 'back-to-indentation)
 ;; &
@@ -156,31 +357,20 @@ static void cjh_setup_normal_mode_mapping(Mapping *mapping, i64 normal_mode_id)
 (define-key cjh-keymap "'" 'cjh-goto-mark)
 ;; :
 ;; "
-(define-key cjh-keymap "{" 'backward-paragraph)
-(define-key cjh-keymap "}" 'forward-paragraph)
-(define-key cjh-keymap "[ " 'cjh-newline-above)
-(define-key cjh-keymap "] " 'cjh-newline-below)
 ;; <
 ;; >
-;; TODO(chogan): Improve semantics of this
 (define-key cjh-keymap "." 'cjh-repeat-last-command)
-
-(if cjh-use-swiper
-    (define-key cjh-keymap "/" 'swiper)
-  (define-key cjh-keymap "/" 'cjh-isearch-forward))
 
 (define-key cjh-keymap "?" 'cjh-isearch-backward)
 (define-key cjh-keymap "0" 'beginning-of-line)
 (define-key cjh-keymap (kbd "TAB") 'indent-for-tab-command)
 
-(define-key cjh-keymap (kbd "C-d") 'cjh-scroll-up-half)
-;; C-n 'cjh-multi-cursor-add
 (define-key cjh-keymap (kbd "C-o") 'pop-to-mark-command)
-(define-key cjh-keymap (kbd "C-u") 'cjh-scroll-down-half)
 ;; C-v
 (define-key cjh-keymap (kbd "C-;") 'cjh-insert-semicolon-at-eol)
 (define-key cjh-keymap (kbd "M-K") 'apply-macro-to-region-lines)
 #endif
+
 }
 
 static void cjh_setup_insert_mode_mapping(Mapping *mapping, i64 global_id, i64 file_id, i64 code_id){
@@ -188,7 +378,7 @@ static void cjh_setup_insert_mode_mapping(Mapping *mapping, i64 global_id, i64 f
     SelectMapping(mapping);
 
     SelectMap(global_id);
-    BindCore(default_startup, CoreCode_Startup);
+    BindCore(chogan_default_startup, CoreCode_Startup);
     BindCore(default_try_exit, CoreCode_TryExit);
 
     // Default global
@@ -349,12 +539,19 @@ custom_layer_init(Application_Links *app){
     initialize_managed_id_metadata(app);
     set_default_color_scheme(app);
 
-
-    // NOTE(allen): default hooks and command maps
+    // NOTE(cjh): Setup custom hooks, command maps, and keybindings.
     chogan_set_hooks(app);
     mapping_init(tctx, &framework_mapping);
     cjh_setup_insert_mode_mapping(&framework_mapping, mapid_global, mapid_file, mapid_code);
-    cjh_setup_normal_mode_mapping(&framework_mapping, mapid_normal_mode);
+    cjh_setup_normal_mode_mapping(&framework_mapping, cjh_mapid_normal_mode);
+    cjh_setup_space_mapping(&framework_mapping, cjh_mapid_space);
+    cjh_setup_buffer_mapping(&framework_mapping, cjh_mapid_buffer);
+    cjh_setup_file_mapping(&framework_mapping, cjh_mapid_file);
+    cjh_setup_window_mapping(&framework_mapping, cjh_mapid_window);
+    cjh_setup_toggle_mapping(&framework_mapping, cjh_mapid_toggle);
+    cjh_setup_quit_mapping(&framework_mapping, cjh_mapid_quit);
+    cjh_setup_comma_mapping(&framework_mapping, cjh_mapid_comma);
+    cjh_setup_g_mapping(&framework_mapping, cjh_mapid_g);
 }
 
 #endif //FCODER_CHOGAN_BINDINGS

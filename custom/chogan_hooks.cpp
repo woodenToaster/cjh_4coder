@@ -4,7 +4,7 @@ chogan_hooks.cpp - Sets up the hooks for the default framework.
 
 // TOP
 
-CUSTOM_COMMAND_SIG(default_startup)
+CUSTOM_COMMAND_SIG(chogan_default_startup)
 CUSTOM_DOC("Default command for responding to a startup event")
 {
     ProfileScope(app, "default startup");
@@ -12,19 +12,22 @@ CUSTOM_DOC("Default command for responding to a startup event")
     if (match_core_code(&input, CoreCode_Startup)){
         String_Const_u8_Array file_names = input.event.core.file_names;
         default_4coder_initialize(app, file_names);
-        default_4coder_side_by_side_panels(app, file_names);
+        default_4coder_side_by_side_panels(app, file_names);	
         if (global_config.automatically_load_project){
             load_project(app);
         }
         load_themes_default_folder(app);
     }
     Color_Table_List *color_table_list = &global_theme_list;
-    for ( Color_Table_Node *node = color_table_list->first; node != 0; node = node->next ) {
-        if ( string_match( node->name, global_config.default_theme_name ) ) {
+    for (Color_Table_Node *node = color_table_list->first; node != 0; node = node->next)
+    {
+        if (string_match(node->name, global_config.default_theme_name))
+        {
             active_color_table = node->table;
             break;
         }
     }
+    cjh_enter_normal_mode(app);
 }
 
 CUSTOM_COMMAND_SIG(default_try_exit)
