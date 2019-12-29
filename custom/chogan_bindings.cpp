@@ -95,12 +95,18 @@ CJH_START_MULTI_KEY_CMD(d)
 CJH_COMMAND_AND_ENTER_NORMAL_MODE(kill_buffer)
 CJH_COMMAND_AND_ENTER_NORMAL_MODE(interactive_switch_buffer)
 
+CUSTOM_COMMAND_SIG(cjh_interactive_switch_buffer_other_window)
+{
+    cjh_interactive_switch_buffer(app);
+    swap_panels(app);
+}
+
 static void cjh_setup_buffer_mapping(Mapping *mapping, i64 buffer_cmd_map_id)
 {
     CJH_CMD_MAPPING_PREAMBLE(buffer_cmd_map_id);
 
     Bind(cjh_interactive_switch_buffer, KeyCode_B);
-    // Bind( , KeyCode_B, KeyCode_Shift); // " bB" 'ido-switch-buffer-other-window)
+    Bind(cjh_interactive_switch_buffer_other_window, KeyCode_B, KeyCode_Shift);
     Bind(cjh_kill_buffer, KeyCode_D);
     // Bind( , KeyCode_D, KeyCode_Shift ); // " bD" 'clean-buffer-list)
     // Bind( , KeyCode_P); // " bp" 'previous-buffer)
@@ -109,7 +115,6 @@ static void cjh_setup_buffer_mapping(Mapping *mapping, i64 buffer_cmd_map_id)
 
 // Window (panel) commands
 CJH_COMMAND_AND_ENTER_NORMAL_MODE(close_panel)
-CJH_COMMAND_AND_ENTER_NORMAL_MODE(change_active_panel_backwards)
 CJH_COMMAND_AND_ENTER_NORMAL_MODE(change_active_panel)
 CJH_COMMAND_AND_ENTER_NORMAL_MODE(open_panel_vsplit)
 CJH_COMMAND_AND_ENTER_NORMAL_MODE(swap_panels)

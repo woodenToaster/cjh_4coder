@@ -516,7 +516,19 @@ run_lister(Application_Links *app, Lister *lister){
                             handled = false;
                         }
                     }break;
-                    
+
+                    case KeyCode_K:
+                    {
+                        if (lister->handlers.navigate && has_modifier(&in.event.key.modifiers, KeyCode_Control))
+                        {
+                            lister->handlers.navigate(app, view, lister, -1);
+                        }
+                        else
+                        {
+                            handled = false;
+                        }
+                    } break;
+
                     case KeyCode_Down:
                     {
                         if (lister->handlers.navigate != 0){
@@ -529,7 +541,19 @@ run_lister(Application_Links *app, Lister *lister){
                             handled = false;
                         }
                     }break;
-                    
+
+                    case KeyCode_J:
+                    {
+                        if (lister->handlers.navigate && has_modifier(&in.event.key.modifiers, KeyCode_Control))
+                        {
+                            lister->handlers.navigate(app, view, lister, 1);
+                        }
+                        else
+                        {
+                            handled = false;
+                        }
+                    } break;
+
                     case KeyCode_PageUp:
                     {
                         if (lister->handlers.navigate != 0){
@@ -543,7 +567,19 @@ run_lister(Application_Links *app, Lister *lister){
                             handled = false;
                         }
                     }break;
-                    
+
+                    case KeyCode_U:
+                    {
+                        if (lister->handlers.navigate && has_modifier(&in.event.key.modifiers, KeyCode_Control))
+                        {
+                            lister->handlers.navigate(app, view, lister, -lister->visible_count);
+                        }
+                        else
+                        {
+                            handled = false;
+                        }
+                    } break;
+
                     case KeyCode_PageDown:
                     {
                         if (lister->handlers.navigate != 0){
@@ -557,7 +593,19 @@ run_lister(Application_Links *app, Lister *lister){
                             handled = false;
                         }
                     }break;
-                    
+
+                    case KeyCode_D:
+                    {
+                        if (lister->handlers.navigate && has_modifier(&in.event.key.modifiers, KeyCode_Control))
+                        {
+                            lister->handlers.navigate(app, view, lister, lister->visible_count);
+                        }
+                        else
+                        {
+                            handled = false;
+                        }
+                    } break;
+
                     default:
                     {
                         if (lister->handlers.key_stroke != 0){
@@ -763,58 +811,12 @@ lister__navigate__default(Application_Links *app, View_ID view, Lister *lister, 
     lister_update_selection_values(lister);
 }
 
-// NOTE(cjh): Navigate listers with C-j, C-k, C-u, C-d
-function Lister_Activation_Code
-lister__key_stroke__cjh(Application_Links *app)
-{
-    User_Input in = get_current_input(app);
-    if (has_modifier(&in.event.key.modifiers, KeyCode_Control))
-    {
-        View_ID view = get_active_view(app, Access_Always);
-        Lister *lister = view_get_lister(view);
-
-        if (lister)
-        {
-            switch (in.event.key.code)
-            {
-                case KeyCode_D:
-                {
-                    if (lister->handlers.navigate != 0){
-                        lister->handlers.navigate(app, view, lister, lister->visible_count);
-                    }
-                } break;
-                case KeyCode_J:
-                {
-                    if (lister->handlers.navigate != 0){
-                        lister->handlers.navigate(app, view, lister, 1);
-                    }
-                } break;
-                case KeyCode_K:
-                {
-                    if (lister->handlers.navigate != 0){
-                        lister->handlers.navigate(app, view, lister, -1);
-                    }
-                } break;
-                case KeyCode_U:
-                {
-                    if (lister->handlers.navigate != 0){
-                        lister->handlers.navigate(app, view, lister, -lister->visible_count);
-                    }
-                } break;
-            }
-        }
-    }
-    Lister_Activation_Code result = ListerActivation_Continue;
-    return result;
-}
-
 function Lister_Handlers
 lister_get_default_handlers(void){
     Lister_Handlers handlers = {};
     handlers.write_character = lister__write_string__default;
     handlers.backspace       = lister__backspace_text_field__default;
     handlers.navigate        = lister__navigate__default;
-    handlers.key_stroke      = lister__key_stroke__cjh;
     return(handlers);
 }
 
