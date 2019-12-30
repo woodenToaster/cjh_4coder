@@ -373,7 +373,9 @@ chogan_render_buffer(Application_Links *app, View_ID view_id, Face_ID face_id,
     }
     else
     {
-        draw_notepad_style_cursor_highlight(app, view_id, buffer, text_layout_id, cursor_roundness);
+        // TODO(cjh): Watch for bugs with cursor placement
+        // i64 cursor_pos = view_get_cursor_pos(app, view_id);
+        draw_character_i_bar(app, text_layout_id, cursor_pos, fcolor_id(defcolor_insert_cursor));
     }
 
     // NOTE(allen): put the actual text on the actual screen
