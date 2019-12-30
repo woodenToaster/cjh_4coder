@@ -409,6 +409,64 @@ CUSTOM_COMMAND_SIG(cjh_open_newline_above)
     cjh_enter_insert_mode(app);
 }
 
+CUSTOM_COMMAND_SIG(cjh_back_to_indentation)
+{
+    seek_beginning_of_line(app);
+    View_ID view = get_active_view(app, Access_ReadWriteVisible);
+    Buffer_ID buffer = view_get_buffer(app, view, Access_ReadWriteVisible);
+    move_past_lead_whitespace(app, view, buffer);
+}
+
+static char cjh_get_char_from_user(Application_Links *app)
+{
+    Query_Bar_Group group(app);
+    Query_Bar bar = {};
+    // TODO(cjh): Memory leak (probably)
+    if (start_query_bar(app, &bar, 0) == 0){
+        return '\0';
+    }
+
+    String_Const_u8 msg_prompt = string_u8_litexpr("Replacement character: ");
+    User_Input in = {};
+    char result = '\0';
+    bool done = false;
+    for (;!done;)
+    {
+        bar.prompt = msg_prompt;
+        in = get_next_input(app, EventProperty_TextInsert,
+                            EventProperty_Escape|EventProperty_ViewActivation);
+        if (in.abort)
+        {
+            break;
+        }
+
+        switch(in.event.kind)
+        {
+            case InputEventKind_TextInsert:
+            {
+                String_Const_u8 string = to_writable(&in);
+                result = string.str[0];
+                done = true;
+            } break;
+            default:
+                continue;
+        }
+    }
+
+    end_query_bar(app, &bar, 0);
+    return result;
+}
+
+CUSTOM_COMMAND_SIG(cjh_replace_char)
+{
+    char replacement = cjh_get_char_from_user(app);
+    if (replacement != '\0')
+    {
+        delete_char(app);
+        write_text(app, SCu8(&replacement));
+    }
+}
+
 static void cjh_setup_normal_mode_mapping(Mapping *mapping, i64 normal_mode_id)
 {
     MappingScope();
@@ -418,7 +476,7 @@ static void cjh_setup_normal_mode_mapping(Mapping *mapping, i64 normal_mode_id)
     // a-z
     Bind(cjh_move_right_and_enter_insert_mode, KeyCode_A);
     Bind(move_left_token_boundary, KeyCode_B);
-    // Bind(cjh_change, KeyCode_C);
+    // Bind(cjh_start_multi_key_cmd_c, KeyCode_C);
     Bind(cjh_start_multi_key_cmd_d, KeyCode_D);
     // TODO(cjh): Can't do multiple 'e' in a row
     Bind(cjh_move_to_end_of_word, KeyCode_E);
@@ -434,6 +492,7 @@ static void cjh_setup_normal_mode_mapping(Mapping *mapping, i64 normal_mode_id)
     Bind(cjh_open_newline_below, KeyCode_O);
     Bind(paste, KeyCode_P);
     // Bind(cjh_quit_isearch_highlight, KeyCode_Q);
+    // TODO(cjh): Not quite working
     // Bind(cjh_replace_char, KeyCode_R);
     // Bind(kmacro_start_macro_or_insert_counter, KeyCode_S);
     // Bind(cjh_find_forward_till, KeyCode_T);
@@ -448,6 +507,7 @@ static void cjh_setup_normal_mode_mapping(Mapping *mapping, i64 normal_mode_id)
 
     Bind(cjh_start_multi_key_cmd_space, KeyCode_Space);
     Bind(cjh_start_multi_key_cmd_comma, KeyCode_Comma);
+    // (define-key cjh-keymap (kbd "TAB") 'indent-for-tab-command)
 
     // A-Z
     Bind(cjh_eol_insert, KeyCode_A, KeyCode_Shift);
@@ -479,7 +539,7 @@ static void cjh_setup_normal_mode_mapping(Mapping *mapping, i64 normal_mode_id)
 
     Bind(seek_beginning_of_textual_line, KeyCode_0);
 
-    // Shift-<special-characters>
+    // Shift-<Special characters>
     Bind(seek_end_of_line, KeyCode_4, KeyCode_Shift);
     Bind(move_up_to_blank_line, KeyCode_LeftBracket, KeyCode_Shift);
     Bind(move_down_to_blank_line, KeyCode_RightBracket, KeyCode_Shift);
@@ -489,29 +549,28 @@ static void cjh_setup_normal_mode_mapping(Mapping *mapping, i64 normal_mode_id)
     // @
     // #
     // (define-key cjh-keymap "%" 'cjh-matching-paren)
-    // (define-key cjh-keymap "^" 'back-to-indentation)
+    Bind(cjh_back_to_indentation, KeyCode_6, KeyCode_Shift);
     // &
     // TODO(cjh): How is search supposed to work?
     Bind(search_identifier, KeyCode_8, KeyCode_Shift);
-    // *e
     // (
     // )
-    // -
     // _
     // +
-    // =
-    // \
     // |
-    // (define-key cjh-keymap ";" 'cjh-repeat-last-find)
-    // (define-key cjh-keymap "'" 'cjh-goto-mark)
-    // :
     // "
     // <
     // >
-    // (define-key cjh-keymap "." 'cjh-repeat-last-command)
-
     // (define-key cjh-keymap "?" 'cjh-isearch-backward)
-    // (define-key cjh-keymap (kbd "TAB") 'indent-for-tab-command)
+    // :
+
+    // Special characters
+    // -
+    // =
+    // \
+    // (define-key cjh-keymap ";" 'cjh-repeat-last-find)
+    // (define-key cjh-keymap "'" 'cjh-goto-mark)
+    // (define-key cjh-keymap "." 'cjh-repeat-last-command)
 
     // Control-<a-z>
     // TODO(cjh): Put the cursor in the middle of the screen?
