@@ -17,6 +17,8 @@ enum CjhCommandMode
 };
 
 static CjhCommandMode cjh_command_mode;
+static u64 cjh_last_time_f_press = 0;
+static u64 cjh_fd_escape_delay_us = 500 * 1000;
 
 static bool cjh_in_normal_mode()
 {
@@ -38,7 +40,6 @@ static void cjh_set_command_map(Application_Links *app, Command_Map_ID new_mapid
 
 CUSTOM_COMMAND_SIG(cjh_enter_normal_mode)
 {
-
     cjh_command_mode = CjhCommandMode_Normal;
     cjh_set_command_map(app, cjh_mapid_normal_mode);
 }
@@ -47,6 +48,26 @@ CUSTOM_COMMAND_SIG(cjh_enter_insert_mode)
 {
     cjh_command_mode = CjhCommandMode_Insert;
     cjh_set_command_map(app, mapid_code);
+}
+
+CUSTOM_COMMAND_SIG(cjh_insert_mode_f)
+{
+    cjh_last_time_f_press = system_now_time();
+    write_text(app, SCu8("f"));
+}
+
+CUSTOM_COMMAND_SIG(cjh_insert_mode_d)
+{
+    if (system_now_time() - cjh_last_time_f_press < cjh_fd_escape_delay_us)
+    {
+        backspace_char(app);
+        cjh_enter_normal_mode(app);
+    }
+    else
+    {
+        write_text_input(app);
+        write_text(app, SCu8("d"));
+    }
 }
 
 #include "chogan_hooks.cpp"
@@ -200,6 +221,7 @@ static void cjh_setup_comma_mapping(Mapping *mapping, i64 comma_cmd_map_id)
 }
 
 // Snippet commands
+CJH_COMMAND_AND_ENTER_NORMAL_MODE(snippet_lister)
 
 static void cjh_insert_snippet(Application_Links *app, char *snippet_name)
 {
@@ -221,15 +243,15 @@ static void cjh_insert_snippet(Application_Links *app, char *snippet_name)
     write_snippet(app, view, buffer, pos, snippet);
 }
 
-#define CJH_DEFINE_SNIPPET(name)                  \
+#define CJH_DEFINE_INSERT_SNIPPET_FUNC(name)      \
     CUSTOM_COMMAND_SIG(cjh_insert_snippet_##name) \
     {                                             \
         cjh_insert_snippet(app, #name);           \
         cjh_enter_normal_mode(app);               \
     }
 
-CJH_DEFINE_SNIPPET(if)
-CJH_DEFINE_SNIPPET(for)
+CJH_DEFINE_INSERT_SNIPPET_FUNC(if)
+CJH_DEFINE_INSERT_SNIPPET_FUNC(for)
 
 static bool cjh_inserting_begin_if0_comment = true;
 
@@ -253,6 +275,7 @@ static void cjh_setup_snippet_mapping(Mapping *mapping, i64 snippet_cmd_map_id)
 
     Bind(cjh_insert_snippet_if, KeyCode_I);
     Bind(cjh_insert_snippet_for, KeyCode_F);
+    Bind(cjh_snippet_lister, KeyCode_S);
     Bind(cjh_insert_snippet_if0, KeyCode_0);
 }
 
@@ -267,15 +290,19 @@ static void cjh_setup_d_mapping(Mapping *mapping, i64 d_cmd_map_id)
 // G commands
 CJH_COMMAND_AND_ENTER_NORMAL_MODE(goto_beginning_of_file)
 CJH_COMMAND_AND_ENTER_NORMAL_MODE(comment_line_toggle)
+CJH_COMMAND_AND_ENTER_NORMAL_MODE(list_all_locations_of_type_definition_of_identifier)
+CJH_COMMAND_AND_ENTER_NORMAL_MODE(open_file_in_quotes)
 
 static void cjh_setup_g_mapping(Mapping *mapping, i64 g_cmd_map_id)
 {
     CJH_CMD_MAPPING_PREAMBLE(g_cmd_map_id);
 
     Bind(cjh_comment_line_toggle, KeyCode_C);
-    // Bind(xref-find-definitions, KeyCode_D);
+    // TODO(cjh): This doesn't really work
+    Bind(cjh_list_all_locations_of_type_definition_of_identifier, KeyCode_D);
     // Bind(backward-to-word, KeyCode_E);
-    // Bind(cjh_open_file_at_point, KeyCode_F);
+    // TODO(cjh): Doesn't end up in normal mode?
+    Bind(cjh_open_file_in_quotes, KeyCode_F);
     Bind(cjh_goto_beginning_of_file, KeyCode_G);
 }
 
@@ -406,55 +433,52 @@ static void cjh_setup_normal_mode_mapping(Mapping *mapping, i64 normal_mode_id)
     // Bind(AVAILABLE, KeyCode_Z, KeyCode_Shift);
 
 
+    Bind(seek_beginning_of_textual_line, KeyCode_0);
+
     // Shift-<special-characters>
     Bind(seek_end_of_line, KeyCode_4, KeyCode_Shift);
     // Bind( , KeyCode_OpenBracket, KeyCode_Shift); "{" 'backward-paragraph)
     // Bind( , KeyCode_CloseBracket, KeyCode_Shift); "}" 'forward-paragraph)
     // Bind( , KeyCode_OpenBracket); "[ " 'cjh-newline-above)
     // Bind( , KeyCode_CloseBracket); "] " 'cjh-newline-below)
+    // ~
+    // `
+    // !
+    // @
+    // #
+    // (define-key cjh-keymap "%" 'cjh-matching-paren)
+    // (define-key cjh-keymap "^" 'back-to-indentation)
+    // &
+    // (define-key cjh-keymap "*" 'isearch-forward-symbol-at-point)
+    // *e
+    // (
+    // )
+    // -
+    // _
+    // +
+    // =
+    // \
+    // |
+    // (define-key cjh-keymap ";" 'cjh-repeat-last-find)
+    // (define-key cjh-keymap "'" 'cjh-goto-mark)
+    // :
+    // "
+    // <
+    // >
+    // (define-key cjh-keymap "." 'cjh-repeat-last-command)
+
+    // (define-key cjh-keymap "?" 'cjh-isearch-backward)
+    // (define-key cjh-keymap (kbd "TAB") 'indent-for-tab-command)
 
     // Control-<a-z>
-    // TODO(cjh): Put the cursor in the middle of the screen
+    // TODO(cjh): Put the cursor in the middle of the screen?
     Bind(page_down, KeyCode_D, KeyCode_Control);
     Bind(page_up, KeyCode_U, KeyCode_Control);
+    // (define-key cjh-keymap (kbd "C-o") 'pop-to-mark-command)
+    // C-v
+    // (define-key cjh-keymap (kbd "C-;") 'cjh-insert-semicolon-at-eol)
 
-#if 0
-;; ~
-;; `
-;; !
-;; @
-;; #
-(define-key cjh-keymap "%" 'cjh-matching-paren)
-(define-key cjh-keymap "^" 'back-to-indentation)
-;; &
-(define-key cjh-keymap "*" 'isearch-forward-symbol-at-point)
-;; *e
-;; (
-;; )
-;; -
-;; _
-;; +
-;; =
-;; \
-;; |
-(define-key cjh-keymap ";" 'cjh-repeat-last-find)
-(define-key cjh-keymap "'" 'cjh-goto-mark)
-;; :
-;; "
-;; <
-;; >
-(define-key cjh-keymap "." 'cjh-repeat-last-command)
-
-(define-key cjh-keymap "?" 'cjh-isearch-backward)
-(define-key cjh-keymap "0" 'beginning-of-line)
-(define-key cjh-keymap (kbd "TAB") 'indent-for-tab-command)
-
-(define-key cjh-keymap (kbd "C-o") 'pop-to-mark-command)
-;; C-v
-(define-key cjh-keymap (kbd "C-;") 'cjh-insert-semicolon-at-eol)
-(define-key cjh-keymap (kbd "M-K") 'apply-macro-to-region-lines)
-#endif
-
+    // TODO(chogan): Surround with ("[{'
 }
 
 static void cjh_setup_insert_mode_mapping(Mapping *mapping, i64 global_id, i64 file_id, i64 code_id){
@@ -513,6 +537,8 @@ static void cjh_setup_insert_mode_mapping(Mapping *mapping, i64 global_id, i64 f
     SelectMap(file_id);
     ParentMap(global_id);
     BindTextInput(write_text_input);
+    Bind(cjh_insert_mode_f, KeyCode_F);
+    Bind(cjh_insert_mode_d, KeyCode_D);
     BindMouse(click_set_cursor_and_mark, MouseCode_Left);
     BindMouseRelease(click_set_cursor, MouseCode_Left);
     BindCore(click_set_cursor_and_mark, CoreCode_ClickActivateView);
@@ -579,6 +605,8 @@ static void cjh_setup_insert_mode_mapping(Mapping *mapping, i64 global_id, i64 f
     SelectMap(code_id);
     ParentMap(file_id);
     BindTextInput(write_text_and_auto_indent);
+    Bind(cjh_insert_mode_f, KeyCode_F);
+    Bind(cjh_insert_mode_d, KeyCode_D);
     Bind(move_left_alpha_numeric_boundary,           KeyCode_Left, KeyCode_Control);
     Bind(move_right_alpha_numeric_boundary,          KeyCode_Right, KeyCode_Control);
     Bind(move_left_alpha_numeric_or_camel_boundary,  KeyCode_Left, KeyCode_Alt);
