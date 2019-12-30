@@ -204,6 +204,7 @@ CJH_COMMAND_AND_ENTER_NORMAL_MODE(build_in_build_panel)
 CJH_COMMAND_AND_ENTER_NORMAL_MODE(save)
 CJH_COMMAND_AND_ENTER_NORMAL_MODE(write_note)
 CJH_COMMAND_AND_ENTER_NORMAL_MODE(write_todo)
+CJH_COMMAND_AND_ENTER_NORMAL_MODE(open_matching_file_cpp)
 
 static void cjh_setup_comma_mapping(Mapping *mapping, i64 comma_cmd_map_id)
 {
@@ -213,6 +214,7 @@ static void cjh_setup_comma_mapping(Mapping *mapping, i64 comma_cmd_map_id)
     // Bind(); ",f" 'fill-paragraph)
     // Bind(); ",gb" 'c-beginning-of-defun)
     // Bind(); ",ge" 'c-end-of-defun)
+    Bind(cjh_open_matching_file_cpp, KeyCode_H);
     // Bind(); ",mf" 'mark-defun)
     Bind(cjh_write_note, KeyCode_N);
     // Bind(); r" 'recompile)
@@ -393,6 +395,14 @@ CUSTOM_COMMAND_SIG(cjh_delete_to_eol)
     move_left(app);
 }
 
+CUSTOM_COMMAND_SIG(cjh_change_to_eol)
+{
+    set_mark(app);
+    seek_end_of_line(app);
+    delete_range(app);
+    cjh_enter_insert_mode(app);
+}
+
 
 CUSTOM_COMMAND_SIG(cjh_open_newline_below)
 {
@@ -419,20 +429,11 @@ CUSTOM_COMMAND_SIG(cjh_back_to_indentation)
 
 static char cjh_get_char_from_user(Application_Links *app)
 {
-    Query_Bar_Group group(app);
-    Query_Bar bar = {};
-    // TODO(cjh): Memory leak (probably)
-    if (start_query_bar(app, &bar, 0) == 0){
-        return '\0';
-    }
-
-    String_Const_u8 msg_prompt = string_u8_litexpr("Replacement character: ");
     User_Input in = {};
     char result = '\0';
     bool done = false;
-    for (;!done;)
+    while (!done)
     {
-        bar.prompt = msg_prompt;
         in = get_next_input(app, EventProperty_TextInsert,
                             EventProperty_Escape|EventProperty_ViewActivation);
         if (in.abort)
@@ -453,7 +454,6 @@ static char cjh_get_char_from_user(Application_Links *app)
         }
     }
 
-    end_query_bar(app, &bar, 0);
     return result;
 }
 
@@ -463,7 +463,7 @@ CUSTOM_COMMAND_SIG(cjh_replace_char)
     if (replacement != '\0')
     {
         delete_char(app);
-        write_text(app, SCu8(&replacement));
+        write_text_input(app);
     }
 }
 
@@ -493,7 +493,7 @@ static void cjh_setup_normal_mode_mapping(Mapping *mapping, i64 normal_mode_id)
     Bind(paste, KeyCode_P);
     // Bind(cjh_quit_isearch_highlight, KeyCode_Q);
     // TODO(cjh): Not quite working
-    // Bind(cjh_replace_char, KeyCode_R);
+    Bind(cjh_replace_char, KeyCode_R);
     // Bind(kmacro_start_macro_or_insert_counter, KeyCode_S);
     // Bind(cjh_find_forward_till, KeyCode_T);
     Bind(undo, KeyCode_U);
@@ -512,26 +512,26 @@ static void cjh_setup_normal_mode_mapping(Mapping *mapping, i64 normal_mode_id)
     // A-Z
     Bind(cjh_eol_insert, KeyCode_A, KeyCode_Shift);
     Bind(move_left_whitespace_boundary, KeyCode_B, KeyCode_Shift);
-    // Bind(cjh-change-to-eol, KeyCode_C, KeyCode_Shift);
+    Bind(cjh_change_to_eol, KeyCode_C, KeyCode_Shift);
     Bind(cjh_delete_to_eol, KeyCode_D, KeyCode_Shift);
     // Bind(AVAILABLE, KeyCode_E, KeyCode_Shift);
-    // Bind(cjh-find-backward, KeyCode_F, KeyCode_Shift);
+    // Bind(cjh_find_backward, KeyCode_F, KeyCode_Shift);
     Bind(goto_end_of_file, KeyCode_G, KeyCode_Shift);
     // Bind(AVAILABLE, KeyCode_H, KeyCode_Shift);
     Bind(cjh_insert_beginning_of_line, KeyCode_I, KeyCode_Shift);
-    // Bind(cjh-delete-indentation, KeyCode_J, KeyCode_Shift);
+    // Bind(cjh_delete_indentation, KeyCode_J, KeyCode_Shift);
     // Bind(kmacro-end-or-call-macro, KeyCode_K, KeyCode_Shift);
     // Bind(AVAILABLE, KeyCode_L, KeyCode_Shift);
-    // Bind(move-to-window-line-top-bottom, KeyCode_M, KeyCode_Shift);
-    // Bind(cjh-isearch-prev, KeyCode_N, KeyCode_Shift);
+    // Bind(move_to_window_line_top_bottom, KeyCode_M, KeyCode_Shift);
+    // Bind(cjh_isearch_prev, KeyCode_N, KeyCode_Shift);
     Bind(cjh_open_newline_above, KeyCode_O, KeyCode_Shift);
     // Bind(AVAILABLE, KeyCode_P, KeyCode_Shift);
     // Bind(AVAILABLE, KeyCode_Q, KeyCode_Shift);
     // Bind(AVAILABLE, KeyCode_R, KeyCode_Shift);
     // Bind(AVAILABLE, KeyCode_S, KeyCode_Shift);
-    // Bind(cjh-find-backward-till, KeyCode_T, KeyCode_Shift);
+    // Bind(cjh_find_backward_till, KeyCode_T, KeyCode_Shift);
     // Bind(AVAILABLE, KeyCode_U, KeyCode_Shift);
-    // Bind(cjh-start-visual-line-selection, KeyCode_V, KeyCode_Shift);
+    // Bind(cjh_start_visual_line_selection, KeyCode_V, KeyCode_Shift);
     Bind(move_right_whitespace_boundary, KeyCode_W, KeyCode_Shift);
     Bind(backspace_char, KeyCode_X, KeyCode_Shift);
     // Bind(AVAILABLE, KeyCode_Y, KeyCode_Shift);
