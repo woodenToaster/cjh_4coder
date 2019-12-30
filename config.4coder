@@ -38,7 +38,7 @@ automatically_indent_text_on_save = true;
 automatically_save_changes_on_build = true;
 
 // Load project on startup
-automatically_load_project = false;
+automatically_load_project = true;
 
 // Indentation
 indent_with_tabs = false;

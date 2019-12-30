@@ -12,10 +12,10 @@ CUSTOM_DOC("Default command for responding to a startup event")
     if (match_core_code(&input, CoreCode_Startup)){
         String_Const_u8_Array file_names = input.event.core.file_names;
         default_4coder_initialize(app, file_names);
-        default_4coder_side_by_side_panels(app, file_names);	
         if (global_config.automatically_load_project){
             load_project(app);
         }
+        chogan_side_by_side_panels(app);
         load_themes_default_folder(app);
     }
     Color_Table_List *color_table_list = &global_theme_list;

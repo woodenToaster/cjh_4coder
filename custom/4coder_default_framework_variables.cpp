@@ -38,8 +38,10 @@ CUSTOM_ID(command_map, cjh_mapid_toggle);
 CUSTOM_ID(command_map, cjh_mapid_comma);
 CUSTOM_ID(command_map, cjh_mapid_snippet);
 CUSTOM_ID(command_map, cjh_mapid_quit);
+CUSTOM_ID(command_map, cjh_mapid_c);
 CUSTOM_ID(command_map, cjh_mapid_d);
 CUSTOM_ID(command_map, cjh_mapid_g);
+CUSTOM_ID(command_map, cjh_mapid_y);
 
 ////////////////////////////////
 

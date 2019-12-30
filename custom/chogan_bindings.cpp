@@ -10,6 +10,15 @@
 #include "4coder_default_include.cpp"
 #include "string.h"
 
+// Helpers
+static void chogan_side_by_side_panels(Application_Links *app)
+{
+    String_Const_u8_Array file_names = {};
+    Buffer_Identifier left = buffer_identifier(string_u8_litexpr("chogan_bindings.cpp"));
+    Buffer_Identifier right = buffer_identifier(string_u8_litexpr("*scratch*"));
+    default_4coder_side_by_side_panels(app, left, right, file_names);
+}
+
 enum CjhCommandMode
 {
     CjhCommandMode_Normal,
@@ -70,6 +79,63 @@ CUSTOM_COMMAND_SIG(cjh_insert_mode_d)
     }
 }
 
+static i64 cjh_buffer_seek_right_word(Application_Links *app, Buffer_ID buffer, i64 start) {
+
+    // TODO(cjh): Doesn't handle string literals that start with a number
+    // TODO(cjh): Only works with ASCII
+    // TODO(cjh): Assumes we'll never have 2 identifiers in a row without other
+    // symbols (may happen with macros)
+
+    i64 result = start;
+    i64 end = buffer_get_size(app, buffer);
+    u8 at = buffer_get_char(app, buffer, start);
+    if (at == '/')
+    {
+        result += 2;
+    }
+    bool in_identifier = false;
+    for (;result < end;)
+    {
+        at = buffer_get_char(app, buffer, result);
+        if (character_is_whitespace(at))
+        {
+            in_identifier = false;
+        }
+        else if (!character_is_alpha_numeric(at) || (character_is_base10(at) && !in_identifier))
+        {
+            if (result != start)
+            {
+                break;
+            }
+        }
+        else if (character_is_alpha(at) || (character_is_base10(at) && in_identifier))
+        {
+            if (!in_identifier && result != start)
+            {
+                break;
+            }
+            in_identifier = true;
+        }
+        else
+        {
+            assert(!"Invalid token in cjh_move_right_next_word");
+        }
+        result += 1;
+        at = buffer_get_char(app, buffer, result);
+    }
+
+    return result;
+}
+
+CUSTOM_COMMAND_SIG(cjh_move_right_word)
+{
+    View_ID view = get_active_view(app, Access_ReadWrite);
+    Buffer_ID buffer = view_get_buffer(app, view, Access_ReadWrite);
+    i64 pos = view_get_cursor_pos(app, view);
+    i64 next_word_pos = cjh_buffer_seek_right_word(app, buffer, pos);
+    view_set_cursor(app, view, seek_pos(next_word_pos));
+}
+
 #include "chogan_hooks.cpp"
 
 CUSTOM_COMMAND_SIG(cjh_move_right_and_enter_insert_mode)
@@ -111,8 +177,10 @@ CJH_START_MULTI_KEY_CMD(toggle)
 CJH_START_MULTI_KEY_CMD(comma)
 CJH_START_MULTI_KEY_CMD(snippet)
 CJH_START_MULTI_KEY_CMD(quit)
-CJH_START_MULTI_KEY_CMD(g)
+CJH_START_MULTI_KEY_CMD(c)
 CJH_START_MULTI_KEY_CMD(d)
+CJH_START_MULTI_KEY_CMD(g)
+CJH_START_MULTI_KEY_CMD(y)
 
 // Buffer commands
 CJH_COMMAND_AND_ENTER_NORMAL_MODE(kill_buffer)
@@ -132,8 +200,8 @@ static void cjh_setup_buffer_mapping(Mapping *mapping, i64 buffer_cmd_map_id)
     Bind(cjh_interactive_switch_buffer_other_window, KeyCode_B, KeyCode_Shift);
     Bind(cjh_kill_buffer, KeyCode_D);
     // Bind(cjh_clean_old_buffers, KeyCode_D, KeyCode_Shift );
-    // Bind(cjh_previous_buffer, KeyCode_P);
-    // Bind(cjh_next_buffer, KeyCode_N);
+    // Bind(cjh_get_buffer_prev, KeyCode_P);
+    // Bind(cjh_get_buffer_next, KeyCode_N);
 }
 
 // Window (panel) commands
@@ -240,7 +308,7 @@ static void cjh_insert_snippet(Application_Links *app, char *snippet_name)
     }
     assert(found);
 
-    View_ID view = get_this_ctx_view(app, Access_ReadWrite);
+    View_ID view = get_active_view(app, Access_ReadWrite);
     Buffer_ID buffer = view_get_buffer(app, view, Access_ReadWriteVisible);
     i64 pos = view_get_cursor_pos(app, view);
     write_snippet(app, view, buffer, pos, snippet);
@@ -282,12 +350,70 @@ static void cjh_setup_snippet_mapping(Mapping *mapping, i64 snippet_cmd_map_id)
     Bind(cjh_insert_snippet_if0, KeyCode_0);
 }
 
+// C commands
+
+#define CJH_CHANGE_COMMAND(motion)              \
+    CUSTOM_COMMAND_SIG(motion##_c)              \
+    {                                           \
+        set_mark(app);                          \
+        motion(app);                            \
+        cut(app);                               \
+        cjh_enter_insert_mode(app);             \
+    }
+
+CJH_CHANGE_COMMAND(cjh_move_right_word)
+CJH_CHANGE_COMMAND(move_right_whitespace_boundary)
+CJH_CHANGE_COMMAND(move_left_token_boundary)
+CJH_CHANGE_COMMAND(move_left_whitespace_boundary)
+CJH_CHANGE_COMMAND(cjh_move_to_end_of_word)
+
+static void cjh_setup_c_mapping(Mapping *mapping, i64 c_cmd_map_id)
+{
+    CJH_CMD_MAPPING_PREAMBLE(c_cmd_map_id);
+
+    Bind(move_left_token_boundary_c, KeyCode_B);
+    Bind(move_left_whitespace_boundary_c, KeyCode_B, KeyCode_Shift);
+    Bind(cjh_move_to_end_of_word_c, KeyCode_E);
+    // f
+    // F
+    // t
+    // T
+    Bind(cjh_move_right_word_c, KeyCode_W);
+    Bind(move_right_whitespace_boundary_c, KeyCode_W, KeyCode_Shift);
+}
+
 // D commands
+CJH_COMMAND_AND_ENTER_NORMAL_MODE(delete_line)
+
+#define CJH_DELETE_COMMAND(motion)              \
+    CUSTOM_COMMAND_SIG(motion##_d)              \
+    {                                           \
+        set_mark(app);                          \
+        motion(app);                            \
+        cut(app);                               \
+        cjh_enter_normal_mode(app);             \
+    }
+
+CJH_DELETE_COMMAND(cjh_move_right_word)
+CJH_DELETE_COMMAND(move_right_whitespace_boundary)
+CJH_DELETE_COMMAND(move_left_token_boundary)
+CJH_DELETE_COMMAND(move_left_whitespace_boundary)
+CJH_DELETE_COMMAND(cjh_move_to_end_of_word)
 
 static void cjh_setup_d_mapping(Mapping *mapping, i64 d_cmd_map_id)
 {
     CJH_CMD_MAPPING_PREAMBLE(d_cmd_map_id);
 
+    Bind(move_left_token_boundary_d, KeyCode_B);
+    Bind(move_left_whitespace_boundary_d, KeyCode_B, KeyCode_Shift);
+    Bind(cjh_delete_line, KeyCode_D);
+    Bind(cjh_move_to_end_of_word_d, KeyCode_E);
+    // f
+    // F
+    // t
+    // T
+    Bind(cjh_move_right_word_d, KeyCode_W);
+    Bind(move_right_whitespace_boundary_d, KeyCode_W, KeyCode_Shift);
 }
 
 // G commands
@@ -309,6 +435,49 @@ static void cjh_setup_g_mapping(Mapping *mapping, i64 g_cmd_map_id)
     Bind(cjh_goto_line, KeyCode_G);
     // TODO(cjh): Doesn't end up in normal mode?
     Bind(cjh_open_file_in_quotes, KeyCode_F);
+}
+
+// Y commands
+
+CUSTOM_COMMAND_SIG(cjh_yank_whole_line)
+{
+    // TODO(cjh): Doesn't insert newline when pasted
+    seek_beginning_of_line(app);
+    set_mark(app);
+    seek_end_of_line(app);
+    copy(app);
+    cjh_enter_normal_mode(app);
+}
+
+#define CJH_YANK_COMMAND(motion)                \
+    CUSTOM_COMMAND_SIG(motion##_y)              \
+    {                                           \
+        set_mark(app);                          \
+        motion(app);                            \
+        copy(app);                              \
+        cjh_enter_normal_mode(app);             \
+    }
+
+CJH_YANK_COMMAND(cjh_move_right_word)
+CJH_YANK_COMMAND(move_right_whitespace_boundary)
+CJH_YANK_COMMAND(move_left_token_boundary)
+CJH_YANK_COMMAND(move_left_whitespace_boundary)
+CJH_YANK_COMMAND(cjh_move_to_end_of_word)
+
+static void cjh_setup_y_mapping(Mapping *mapping, i64 y_cmd_map_id)
+{
+    CJH_CMD_MAPPING_PREAMBLE(y_cmd_map_id);
+
+    Bind(move_left_token_boundary_y, KeyCode_B);
+    Bind(move_left_whitespace_boundary_y, KeyCode_B, KeyCode_Shift);
+    Bind(cjh_move_to_end_of_word_y, KeyCode_E);
+    // f
+    // F
+    // t
+    // T
+    Bind(cjh_move_right_word_y, KeyCode_W);
+    Bind(move_right_whitespace_boundary_y, KeyCode_W, KeyCode_Shift);
+    Bind(cjh_yank_whole_line, KeyCode_Y);
 }
 
 CUSTOM_COMMAND_SIG(cjh_insert_newline_above)
@@ -380,18 +549,11 @@ CUSTOM_COMMAND_SIG(cjh_insert_beginning_of_line)
     cjh_enter_insert_mode(app);
 }
 
-CUSTOM_COMMAND_SIG(cjh_move_right_token_boundary)
-{
-    // TODO(cjh): Treats " and ; as part of a token. Doesn't work in comments.
-    move_right_token_boundary(app);
-    move_right(app);
-}
-
 CUSTOM_COMMAND_SIG(cjh_delete_to_eol)
 {
     set_mark(app);
     seek_end_of_line(app);
-    delete_range(app);
+    cut(app);
     move_left(app);
 }
 
@@ -399,7 +561,7 @@ CUSTOM_COMMAND_SIG(cjh_change_to_eol)
 {
     set_mark(app);
     seek_end_of_line(app);
-    delete_range(app);
+    cut(app);
     cjh_enter_insert_mode(app);
 }
 
@@ -476,7 +638,7 @@ static void cjh_setup_normal_mode_mapping(Mapping *mapping, i64 normal_mode_id)
     // a-z
     Bind(cjh_move_right_and_enter_insert_mode, KeyCode_A);
     Bind(move_left_token_boundary, KeyCode_B);
-    // Bind(cjh_start_multi_key_cmd_c, KeyCode_C);
+    Bind(cjh_start_multi_key_cmd_c, KeyCode_C);
     Bind(cjh_start_multi_key_cmd_d, KeyCode_D);
     // TODO(cjh): Can't do multiple 'e' in a row
     Bind(cjh_move_to_end_of_word, KeyCode_E);
@@ -499,10 +661,9 @@ static void cjh_setup_normal_mode_mapping(Mapping *mapping, i64 normal_mode_id)
     Bind(undo, KeyCode_U);
     // Bind(cjh_visual_state, KeyCode_V);
     // TODO(cjh): 'w' doesn't work quite right
-    Bind(cjh_move_right_token_boundary, KeyCode_W);
+    Bind(cjh_move_right_word, KeyCode_W);
     Bind(delete_char, KeyCode_X);
-    // TODO(cjh): Should start a new key map
-    Bind(copy, KeyCode_Y);
+    Bind(cjh_start_multi_key_cmd_y, KeyCode_Y);
     // Bind(AVAILABLE, KeyCode_Z);
 
     Bind(cjh_start_multi_key_cmd_space, KeyCode_Space);
@@ -575,6 +736,7 @@ static void cjh_setup_normal_mode_mapping(Mapping *mapping, i64 normal_mode_id)
     // Control-<a-z>
     // TODO(cjh): Put the cursor in the middle of the screen?
     Bind(page_down, KeyCode_D, KeyCode_Control);
+    // C-l
     Bind(page_up, KeyCode_U, KeyCode_Control);
     // (define-key cjh-keymap (kbd "C-o") 'pop-to-mark-command)
     // C-v
@@ -766,7 +928,10 @@ custom_layer_init(Application_Links *app){
     cjh_setup_comma_mapping(&framework_mapping, cjh_mapid_comma);
     cjh_setup_snippet_mapping(&framework_mapping, cjh_mapid_snippet);
     cjh_setup_quit_mapping(&framework_mapping, cjh_mapid_quit);
+    cjh_setup_c_mapping(&framework_mapping, cjh_mapid_c);
+    cjh_setup_d_mapping(&framework_mapping, cjh_mapid_d);
     cjh_setup_g_mapping(&framework_mapping, cjh_mapid_g);
+    cjh_setup_y_mapping(&framework_mapping, cjh_mapid_y);
 }
 
 #endif //FCODER_CHOGAN_BINDINGS
