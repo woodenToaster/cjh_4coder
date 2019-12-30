@@ -131,9 +131,9 @@ static void cjh_setup_buffer_mapping(Mapping *mapping, i64 buffer_cmd_map_id)
     Bind(cjh_interactive_switch_buffer, KeyCode_B);
     Bind(cjh_interactive_switch_buffer_other_window, KeyCode_B, KeyCode_Shift);
     Bind(cjh_kill_buffer, KeyCode_D);
-    // Bind( , KeyCode_D, KeyCode_Shift ); // " bD" 'clean-buffer-list)
-    // Bind( , KeyCode_P); // " bp" 'previous-buffer)
-    // Bind( , KeyCode_N); // " bn" 'next-buffer)
+    // Bind(cjh_clean_old_buffers, KeyCode_D, KeyCode_Shift );
+    // Bind(cjh_previous_buffer, KeyCode_P);
+    // Bind(cjh_next_buffer, KeyCode_N);
 }
 
 // Window (panel) commands
@@ -152,6 +152,8 @@ static void cjh_setup_window_mapping(Mapping *mapping, i64 window_cmd_map_id)
     Bind(cjh_open_panel_vsplit, KeyCode_ForwardSlash);
     Bind(cjh_swap_panels, KeyCode_L, KeyCode_Shift);
     Bind(cjh_swap_panels, KeyCode_H, KeyCode_Shift);
+    // -
+    // =
 }
 
 // File commands
@@ -164,8 +166,8 @@ static void cjh_setup_file_mapping(Mapping *mapping, i64 file_cmd_map_id)
 
     Bind(cjh_interactive_open_or_new, KeyCode_F);
     Bind(cjh_open_in_other, KeyCode_F, KeyCode_Shift);
-    // Bind(, KeyCode_R); " fr" 'ido-find-file-read-only)
-    // Bind(, KeyCode_R, KeyCode_Shift); " fR" 'cjh-rename-file)
+    // Bind(cjh_open_file_read_only, KeyCode_R);
+    // Bind(cjh_rename_file, KeyCode_R, KeyCode_Shift);
 }
 
 static void cjh_setup_quit_mapping(Mapping *mapping, i64 quit_cmd_map_id)
@@ -208,7 +210,6 @@ static void cjh_setup_comma_mapping(Mapping *mapping, i64 comma_cmd_map_id)
     CJH_CMD_MAPPING_PREAMBLE(comma_cmd_map_id);
 
     Bind(cjh_build_in_build_panel, KeyCode_B);
-    // Bind(); ",c" 'cjh-insert-if0-comment)
     // Bind(); ",f" 'fill-paragraph)
     // Bind(); ",gb" 'c-beginning-of-defun)
     // Bind(); ",ge" 'c-end-of-defun)
@@ -292,18 +293,38 @@ CJH_COMMAND_AND_ENTER_NORMAL_MODE(goto_beginning_of_file)
 CJH_COMMAND_AND_ENTER_NORMAL_MODE(comment_line_toggle)
 CJH_COMMAND_AND_ENTER_NORMAL_MODE(list_all_locations_of_type_definition_of_identifier)
 CJH_COMMAND_AND_ENTER_NORMAL_MODE(open_file_in_quotes)
+CJH_COMMAND_AND_ENTER_NORMAL_MODE(goto_line)
 
 static void cjh_setup_g_mapping(Mapping *mapping, i64 g_cmd_map_id)
 {
     CJH_CMD_MAPPING_PREAMBLE(g_cmd_map_id);
 
+    Bind(cjh_goto_beginning_of_file, KeyCode_B);
     Bind(cjh_comment_line_toggle, KeyCode_C);
     // TODO(cjh): This doesn't really work
     Bind(cjh_list_all_locations_of_type_definition_of_identifier, KeyCode_D);
     // Bind(backward-to-word, KeyCode_E);
+    Bind(cjh_goto_line, KeyCode_G);
     // TODO(cjh): Doesn't end up in normal mode?
     Bind(cjh_open_file_in_quotes, KeyCode_F);
-    Bind(cjh_goto_beginning_of_file, KeyCode_G);
+}
+
+CUSTOM_COMMAND_SIG(cjh_insert_newline_above)
+{
+    set_mark(app);
+    seek_beginning_of_line(app);
+    write_text(app, SCu8("\n"));
+    cursor_mark_swap(app);
+    cjh_enter_normal_mode(app);
+}
+
+CUSTOM_COMMAND_SIG(cjh_insert_newline_below)
+{
+    set_mark(app);
+    seek_end_of_line(app);
+    write_text(app, SCu8("\n"));
+    cursor_mark_swap(app);
+    cjh_enter_normal_mode(app);
 }
 
 static void cjh_setup_space_mapping(Mapping *mapping, i64 space_cmd_map_id)
@@ -316,13 +337,11 @@ static void cjh_setup_space_mapping(Mapping *mapping, i64 space_cmd_map_id)
     // Bind(); // " d" 'dired)
     // Bind(); // " en" 'compilation-next-error-function)
     Bind(cjh_start_multi_key_cmd_file, KeyCode_F);
-    // Bind(); // " gg" 'goto-line)
     // " i"
     // Bind(); // " jw" 'ace-jump-word-mode)
     // Bind(); // " jc" 'ace-jump-char-mode)
     // Bind(); // " jl" 'ace-jump-line-mode))
     // " k"
-
     // Bind(); // " ls" 'window-configuration-to-register)
     // Bind(); // " ll" 'jump-to-register)
     // " m"
@@ -335,14 +354,16 @@ static void cjh_setup_space_mapping(Mapping *mapping, i64 space_cmd_map_id)
     Bind(cjh_start_multi_key_cmd_snippet, KeyCode_S);
     // s/.../.../g
     Bind(cjh_start_multi_key_cmd_toggle, KeyCode_T);
-    // Bind(); // " u" 'universal-argument)
+    // " u"
     // " v"
     Bind(cjh_start_multi_key_cmd_window, KeyCode_W);
     // " x"
     // " y"
     // " z"
-    // " /" project wide search
-    // Bind(); // " \t" 'cjh-toggle-prev-buffer)
+    // Bind(cjh_interactive_search_in_project, KeyCode_ForwardSlash);
+    // Bind(cjh_toggle_previous_buffer, KeyCode_Tab);
+    Bind(cjh_insert_newline_above, KeyCode_LeftBracket);
+    Bind(cjh_insert_newline_below, KeyCode_RightBracket);
 }
 
 CUSTOM_COMMAND_SIG(cjh_eol_insert)
@@ -362,6 +383,30 @@ CUSTOM_COMMAND_SIG(cjh_move_right_token_boundary)
     // TODO(cjh): Treats " and ; as part of a token. Doesn't work in comments.
     move_right_token_boundary(app);
     move_right(app);
+}
+
+CUSTOM_COMMAND_SIG(cjh_delete_to_eol)
+{
+    set_mark(app);
+    seek_end_of_line(app);
+    delete_range(app);
+    move_left(app);
+}
+
+
+CUSTOM_COMMAND_SIG(cjh_open_newline_below)
+{
+    seek_end_of_line(app);
+    write_text(app, SCu8("\n"));
+    cjh_enter_insert_mode(app);
+}
+
+CUSTOM_COMMAND_SIG(cjh_open_newline_above)
+{
+    seek_beginning_of_line(app);
+    write_text(app, SCu8("\n"));
+    move_up(app);
+    cjh_enter_insert_mode(app);
 }
 
 static void cjh_setup_normal_mode_mapping(Mapping *mapping, i64 normal_mode_id)
@@ -386,7 +431,7 @@ static void cjh_setup_normal_mode_mapping(Mapping *mapping, i64 normal_mode_id)
     Bind(move_right, KeyCode_L);
     // Bind(cjh_store_mark, KeyCode_M);
     // Bind(cjh_isearch_next, KeyCode_N);
-    // Bind(cjh_open_newline_below, KeyCode_O);
+    Bind(cjh_open_newline_below, KeyCode_O);
     Bind(paste, KeyCode_P);
     // Bind(cjh_quit_isearch_highlight, KeyCode_Q);
     // Bind(cjh_replace_char, KeyCode_R);
@@ -408,7 +453,7 @@ static void cjh_setup_normal_mode_mapping(Mapping *mapping, i64 normal_mode_id)
     Bind(cjh_eol_insert, KeyCode_A, KeyCode_Shift);
     Bind(move_left_whitespace_boundary, KeyCode_B, KeyCode_Shift);
     // Bind(cjh-change-to-eol, KeyCode_C, KeyCode_Shift);
-    Bind(delete_line, KeyCode_D, KeyCode_Shift);
+    Bind(cjh_delete_to_eol, KeyCode_D, KeyCode_Shift);
     // Bind(AVAILABLE, KeyCode_E, KeyCode_Shift);
     // Bind(cjh-find-backward, KeyCode_F, KeyCode_Shift);
     Bind(goto_end_of_file, KeyCode_G, KeyCode_Shift);
@@ -419,7 +464,7 @@ static void cjh_setup_normal_mode_mapping(Mapping *mapping, i64 normal_mode_id)
     // Bind(AVAILABLE, KeyCode_L, KeyCode_Shift);
     // Bind(move-to-window-line-top-bottom, KeyCode_M, KeyCode_Shift);
     // Bind(cjh-isearch-prev, KeyCode_N, KeyCode_Shift);
-    // Bind(cjh-open-newline-above, KeyCode_O, KeyCode_Shift);
+    Bind(cjh_open_newline_above, KeyCode_O, KeyCode_Shift);
     // Bind(AVAILABLE, KeyCode_P, KeyCode_Shift);
     // Bind(AVAILABLE, KeyCode_Q, KeyCode_Shift);
     // Bind(AVAILABLE, KeyCode_R, KeyCode_Shift);
@@ -432,15 +477,12 @@ static void cjh_setup_normal_mode_mapping(Mapping *mapping, i64 normal_mode_id)
     // Bind(AVAILABLE, KeyCode_Y, KeyCode_Shift);
     // Bind(AVAILABLE, KeyCode_Z, KeyCode_Shift);
 
-
     Bind(seek_beginning_of_textual_line, KeyCode_0);
 
     // Shift-<special-characters>
     Bind(seek_end_of_line, KeyCode_4, KeyCode_Shift);
-    // Bind( , KeyCode_OpenBracket, KeyCode_Shift); "{" 'backward-paragraph)
-    // Bind( , KeyCode_CloseBracket, KeyCode_Shift); "}" 'forward-paragraph)
-    // Bind( , KeyCode_OpenBracket); "[ " 'cjh-newline-above)
-    // Bind( , KeyCode_CloseBracket); "] " 'cjh-newline-below)
+    Bind(move_up_to_blank_line, KeyCode_LeftBracket, KeyCode_Shift);
+    Bind(move_down_to_blank_line, KeyCode_RightBracket, KeyCode_Shift);
     // ~
     // `
     // !
@@ -449,7 +491,8 @@ static void cjh_setup_normal_mode_mapping(Mapping *mapping, i64 normal_mode_id)
     // (define-key cjh-keymap "%" 'cjh-matching-paren)
     // (define-key cjh-keymap "^" 'back-to-indentation)
     // &
-    // (define-key cjh-keymap "*" 'isearch-forward-symbol-at-point)
+    // TODO(cjh): How is search supposed to work?
+    Bind(search_identifier, KeyCode_8, KeyCode_Shift);
     // *e
     // (
     // )
