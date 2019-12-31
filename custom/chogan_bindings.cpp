@@ -753,8 +753,7 @@ static void cjh_setup_normal_mode_mapping(Mapping *mapping, i64 normal_mode_id)
     Bind(seek_end_of_line, KeyCode_4, KeyCode_Shift);
     Bind(move_up_to_blank_line, KeyCode_LeftBracket, KeyCode_Shift);
     Bind(move_down_to_blank_line, KeyCode_RightBracket, KeyCode_Shift);
-    // TODO(cjh): Figure out KeyCode for backtick
-    Bind(cjh_toggle_upper_lower, 38, KeyCode_Shift);
+    Bind(cjh_toggle_upper_lower, KeyCode_Tick, KeyCode_Shift);
     // `
     // !
     // @

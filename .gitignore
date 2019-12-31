@@ -4,9 +4,3 @@
 *.pdb
 
 .vs/
-fonts/
-themes/
-custom/bin/
-custom/generated/
-custom/languages/
-custom/lexer_generator/
