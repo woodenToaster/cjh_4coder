@@ -175,6 +175,7 @@ CJH_START_MULTI_KEY_CMD(file)
 CJH_START_MULTI_KEY_CMD(window)
 CJH_START_MULTI_KEY_CMD(toggle)
 CJH_START_MULTI_KEY_CMD(comma)
+CJH_START_MULTI_KEY_CMD(macro)
 CJH_START_MULTI_KEY_CMD(snippet)
 CJH_START_MULTI_KEY_CMD(quit)
 CJH_START_MULTI_KEY_CMD(c)
@@ -350,6 +351,19 @@ static void cjh_setup_snippet_mapping(Mapping *mapping, i64 snippet_cmd_map_id)
     Bind(cjh_insert_snippet_if0, KeyCode_0);
 }
 
+// Macro commands
+CJH_COMMAND_AND_ENTER_NORMAL_MODE(keyboard_macro_start_recording)
+CJH_COMMAND_AND_ENTER_NORMAL_MODE(keyboard_macro_finish_recording)
+
+static void cjh_setup_macro_mapping(Mapping *mapping, i64 macro_cmd_map_id)
+{
+    CJH_CMD_MAPPING_PREAMBLE(macro_cmd_map_id);
+
+    Bind(cjh_keyboard_macro_start_recording, KeyCode_R);
+    Bind(cjh_keyboard_macro_finish_recording, KeyCode_S);
+    // Bind(cjh_display_recorded_macro, KeyCode_D);
+}
+
 // C commands
 
 #define CJH_CHANGE_COMMAND(motion)              \
@@ -515,7 +529,7 @@ static void cjh_setup_space_mapping(Mapping *mapping, i64 space_cmd_map_id)
     // " k"
     // Bind(); // " ls" 'window-configuration-to-register)
     // Bind(); // " ll" 'jump-to-register)
-    // " m"
+    Bind(cjh_start_multi_key_cmd_macro, KeyCode_M);
     // " n"
     // " o"
     // " p"
@@ -629,6 +643,40 @@ CUSTOM_COMMAND_SIG(cjh_replace_char)
     }
 }
 
+static u8 cjh_get_character_at_cursor(Application_Links *app)
+{
+    View_ID view = get_active_view(app, Access_ReadWrite);
+    Buffer_ID buffer = view_get_buffer(app, view, Access_ReadWrite);
+    i64 pos = view_get_cursor_pos(app, view);
+    u8 result = buffer_get_char(app, buffer, pos);
+
+    return result;
+}
+
+CUSTOM_COMMAND_SIG(cjh_toggle_upper_lower)
+{
+    u8 at = cjh_get_character_at_cursor(app);
+    u8 new_char = '\0';
+
+    if (character_is_lower(at))
+    {
+        new_char = character_to_upper(at);
+
+    }
+    else if (character_is_upper(at))
+    {
+        new_char = character_to_lower(at);
+    }
+
+    if (new_char)
+    {
+        delete_char(app);
+        write_text(app, SCu8(&new_char, 1));
+    }
+}
+
+CJH_COMMAND_AND_ENTER_NORMAL_MODE(keyboard_macro_replay)
+
 static void cjh_setup_normal_mode_mapping(Mapping *mapping, i64 normal_mode_id)
 {
     MappingScope();
@@ -688,7 +736,8 @@ static void cjh_setup_normal_mode_mapping(Mapping *mapping, i64 normal_mode_id)
     Bind(cjh_open_newline_above, KeyCode_O, KeyCode_Shift);
     // Bind(AVAILABLE, KeyCode_P, KeyCode_Shift);
     // Bind(AVAILABLE, KeyCode_Q, KeyCode_Shift);
-    // Bind(AVAILABLE, KeyCode_R, KeyCode_Shift);
+    // TODO(cjh): Only works once
+    Bind(cjh_keyboard_macro_replay, KeyCode_R, KeyCode_Shift);
     // Bind(AVAILABLE, KeyCode_S, KeyCode_Shift);
     // Bind(cjh_find_backward_till, KeyCode_T, KeyCode_Shift);
     // Bind(AVAILABLE, KeyCode_U, KeyCode_Shift);
@@ -704,7 +753,8 @@ static void cjh_setup_normal_mode_mapping(Mapping *mapping, i64 normal_mode_id)
     Bind(seek_end_of_line, KeyCode_4, KeyCode_Shift);
     Bind(move_up_to_blank_line, KeyCode_LeftBracket, KeyCode_Shift);
     Bind(move_down_to_blank_line, KeyCode_RightBracket, KeyCode_Shift);
-    // ~
+    // TODO(cjh): Figure out KeyCode for backtick
+    Bind(cjh_toggle_upper_lower, 38, KeyCode_Shift);
     // `
     // !
     // @
@@ -927,6 +977,7 @@ custom_layer_init(Application_Links *app){
     cjh_setup_toggle_mapping(&framework_mapping, cjh_mapid_toggle);
     cjh_setup_comma_mapping(&framework_mapping, cjh_mapid_comma);
     cjh_setup_snippet_mapping(&framework_mapping, cjh_mapid_snippet);
+    cjh_setup_macro_mapping(&framework_mapping, cjh_mapid_macro);
     cjh_setup_quit_mapping(&framework_mapping, cjh_mapid_quit);
     cjh_setup_c_mapping(&framework_mapping, cjh_mapid_c);
     cjh_setup_d_mapping(&framework_mapping, cjh_mapid_d);
