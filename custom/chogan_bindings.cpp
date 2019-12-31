@@ -2,6 +2,17 @@
 
 // TOP
 
+// TODO(chogan): Missing functionality
+// - '.' for repeat last command
+// - " /" for project wide search
+// - Visibility into key presses/active key map
+//   - Minibuffer?
+// - Syntax highlighting for type names
+
+// TODO(chogan): Bugs
+// Can't type certain capital letters (f, d)
+// cw doesn't work within a number
+// NOTE()
 #if !defined(FCODER_CHOGAN_BINDINGS_CPP)
 #define FCODER_CHOGAN_BINDINGS_CPP
 
@@ -777,7 +788,8 @@ static void cjh_setup_normal_mode_mapping(Mapping *mapping, i64 normal_mode_id)
     // Special characters
     // -
     // =
-    // \
+    // backslash
+    Bind(search, KeyCode_ForwardSlash);
     // (define-key cjh-keymap ";" 'cjh-repeat-last-find)
     // (define-key cjh-keymap "'" 'cjh-goto-mark)
     // (define-key cjh-keymap "." 'cjh-repeat-last-command)
