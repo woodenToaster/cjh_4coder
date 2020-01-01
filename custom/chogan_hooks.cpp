@@ -355,7 +355,7 @@ chogan_render_buffer(Application_Links *app, View_ID view_id, Face_ID face_id,
     }
 
     // NOTE(allen): Line highlight
-    if (global_config.highlight_line_at_cursor && is_active_view){
+    if (global_config.highlight_line_at_cursor && is_active_view && !global_config.highlight_range){
         i64 line_number = get_line_number_from_pos(app, buffer, cursor_pos);
         draw_line_highlight(app, text_layout_id, line_number,
                             fcolor_id(defcolor_highlight_cursor_line));
@@ -368,15 +368,18 @@ chogan_render_buffer(Application_Links *app, View_ID view_id, Face_ID face_id,
 
     if (view_id != cjh_status_panel_view_id)
     {
-        if (cjh_in_normal_mode())
-        {
-            draw_original_4coder_style_cursor_mark_highlight(app, view_id, is_active_view, buffer, text_layout_id,
-                                                             cursor_roundness, mark_thickness);
-        }
-        else
-        {
-            draw_character_i_bar(app, text_layout_id, cursor_pos, fcolor_id(defcolor_insert_cursor));
-        }
+        cjh_draw_cursor_mark_highlight(app, view_id, is_active_view, buffer, text_layout_id, cursor_roundness,
+                                       mark_thickness);
+        // if (cjh_in_normal_mode())
+        // {
+        //     draw_original_4coder_style_cursor_mark_highlight(app, view_id, is_active_view, buffer, text_layout_id,
+        //                                                      cursor_roundness, mark_thickness);
+        // }
+        // else
+        // {
+        //     // draw_character_i_bar(app, text_layout_id, cursor_pos, fcolor_id(defcolor_insert_cursor));
+        //     draw_notepad_style_cursor_highlight(app, view_id, buffer, text_layout_id, cursor_roundness);
+        // }
     }
 
     // NOTE(allen): put the actual text on the actual screen

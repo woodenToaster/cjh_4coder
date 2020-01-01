@@ -166,6 +166,7 @@ CUSTOM_DOC("Turns uncommented lines into commented lines and vice versa for comm
 static Snippet default_snippets[] = {
     // general (for Allen's style)
     {"if",     "if (){\n\n}\n", 4, 7},
+    {"case",   "case :\n{\n\n} break;\n", 5, 8},
     {"if0",    "#if 0", 4, 4},
     {"endif",  "#endif", 5, 5},
     {"ifelse", "if (){\n\n}\nelse{\n\n}", 4, 7},

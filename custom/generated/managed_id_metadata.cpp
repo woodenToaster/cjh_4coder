@@ -59,6 +59,7 @@ mapid_global = managed_id_declare(app, string_u8_litexpr("command_map"), string_
 mapid_file = managed_id_declare(app, string_u8_litexpr("command_map"), string_u8_litexpr("mapid_file"));
 mapid_code = managed_id_declare(app, string_u8_litexpr("command_map"), string_u8_litexpr("mapid_code"));
 cjh_mapid_normal_mode = managed_id_declare(app, string_u8_litexpr("command_map"), string_u8_litexpr("cjh_mapid_normal_mode"));
+cjh_mapid_visual_line_mode = managed_id_declare(app, string_u8_litexpr("command_map"), string_u8_litexpr("cjh_mapid_visual_line_mode"));
 cjh_mapid_space = managed_id_declare(app, string_u8_litexpr("command_map"), string_u8_litexpr("cjh_mapid_space"));
 cjh_mapid_buffer = managed_id_declare(app, string_u8_litexpr("command_map"), string_u8_litexpr("cjh_mapid_buffer"));
 cjh_mapid_file = managed_id_declare(app, string_u8_litexpr("command_map"), string_u8_litexpr("cjh_mapid_file"));

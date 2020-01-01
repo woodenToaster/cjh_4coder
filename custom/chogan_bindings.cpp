@@ -4,7 +4,11 @@
 
 // TODO(chogan): Missing functionality
 // - Visual mode
+//   - Change range to whole lines
+//   - Change cursor to under bar
+//   - Modify commands to act on range
 // - '.' for repeat last command
+//   - Save latest range in keyboard_log_buffer
 // - " /" for project wide search
 // - '/' for file search
 // - Keep minibuffer open for displaying messages?
@@ -16,19 +20,21 @@
 // 'e' doesn't work in comments
 // Scratch buffer has same ID as status panel?
 // Commands like df<char> and ct<char> stop 1 char early
+// Keyboard macros only replay once
 
 #if !defined(FCODER_CHOGAN_BINDINGS_CPP)
 #define FCODER_CHOGAN_BINDINGS_CPP
 
 #include <assert.h>
+#include <string.h>
 
-#include "4coder_default_include.cpp"
-#include "string.h"
+#include "4coder_base_types.h"
 
 enum CjhCommandMode
 {
     CjhCommandMode_Normal,
     CjhCommandMode_Insert,
+    CjhCommandMode_VisualLine
 };
 
 enum CjhFindDir
@@ -37,14 +43,105 @@ enum CjhFindDir
     CjhFindDir_Backward
 };
 
-static CjhCommandMode cjh_command_mode;
-static u64 cjh_last_time_f_press;
-static u64 cjh_fd_escape_delay_us = 500 * 1000;
+typedef void CjhMultiKeyCmdHook(Application_Links *app);
+
+struct CjhMultiKeyCmdHooks
+{
+    CjhMultiKeyCmdHook *cjh_visual_line_mode_hook;
+    CjhMultiKeyCmdHook *cjh_space_hook;
+    CjhMultiKeyCmdHook *cjh_buffer_hook;
+    CjhMultiKeyCmdHook *cjh_file_hook;
+    CjhMultiKeyCmdHook *cjh_window_hook;
+    CjhMultiKeyCmdHook *cjh_toggle_hook;
+    CjhMultiKeyCmdHook *cjh_comma_hook;
+    CjhMultiKeyCmdHook *cjh_macro_hook;
+    CjhMultiKeyCmdHook *cjh_snippet_hook;
+    CjhMultiKeyCmdHook *cjh_quit_hook;
+    CjhMultiKeyCmdHook *cjh_c_hook;
+    CjhMultiKeyCmdHook *cjh_d_hook;
+    CjhMultiKeyCmdHook *cjh_g_hook;
+    CjhMultiKeyCmdHook *cjh_y_hook;
+};
+
 static u8 cjh_last_f_search;
-static CjhFindDir cjh_last_find_dir;
 static bool cjh_last_find_was_til;
+static u64 cjh_last_time_f_press;
+static u64 cjh_fd_escape_delay_us = 333 * 1000;
+static CjhCommandMode cjh_command_mode;
+static CjhFindDir cjh_last_find_dir;
+static CjhMultiKeyCmdHooks cjh_multi_key_cmd_hooks;
+static Range_i64 cjh_visual_line_mode_range;
+
+static bool cjh_in_visual_line_mode();
+
+#include "4coder_default_include.cpp"
+
+// Forward declarations
+static void cjh_set_command_map(Application_Links *app, Command_Map_ID new_mapid);
+static void cjh_write_key_to_status_panel(Application_Links *app);
+
+static void cjh_toggle_highlight_range()
+{
+    global_config.highlight_range = !global_config.highlight_range;
+}
+
+static void cjh_update_visual_line_mode_range(Application_Links *app)
+{
+    View_ID view = get_active_view(app, Access_ReadWrite);
+    i64 saved_cursor = view_get_cursor_pos(app, view);
+    seek_beginning_of_line(app);
+    cjh_visual_line_mode_range.start = view_get_cursor_pos(app, view);
+    seek_end_of_line(app);
+    cjh_visual_line_mode_range.end = view_get_cursor_pos(app, view);
+    view_set_cursor(app, view, seek_pos(saved_cursor));
+}
+
+// Multi key command hooks
+static void cjh_visual_line_mode_hook(Application_Links *app)
+{
+    cjh_toggle_highlight_range();
+    cjh_command_mode = CjhCommandMode_VisualLine;
+    cjh_update_visual_line_mode_range(app);
+
+
+}
+
+#define CJH_START_MULTI_KEY_CMD(category)                        \
+    CUSTOM_COMMAND_SIG(cjh_start_multi_key_cmd_##category)       \
+    {                                                            \
+        cjh_set_command_map(app, cjh_mapid_##category);          \
+        if (cjh_multi_key_cmd_hooks.cjh_##category##_hook)       \
+        {                                                        \
+            cjh_multi_key_cmd_hooks.cjh_##category##_hook(app);  \
+        }                                                        \
+        cjh_write_key_to_status_panel(app);                      \
+    }
+
+// Multi key modes
+CJH_START_MULTI_KEY_CMD(visual_line_mode)
+CJH_START_MULTI_KEY_CMD(space)
+CJH_START_MULTI_KEY_CMD(buffer)
+CJH_START_MULTI_KEY_CMD(file)
+CJH_START_MULTI_KEY_CMD(window)
+CJH_START_MULTI_KEY_CMD(toggle)
+CJH_START_MULTI_KEY_CMD(comma)
+CJH_START_MULTI_KEY_CMD(macro)
+CJH_START_MULTI_KEY_CMD(snippet)
+CJH_START_MULTI_KEY_CMD(quit)
+CJH_START_MULTI_KEY_CMD(c)
+CJH_START_MULTI_KEY_CMD(d)
+CJH_START_MULTI_KEY_CMD(g)
+CJH_START_MULTI_KEY_CMD(y)
 
 // Helpers
+static void cjh_set_command_map(Application_Links *app, Command_Map_ID new_mapid)
+{
+    Buffer_ID buffer_id = view_get_buffer(app, get_active_view(app, Access_ReadVisible), Access_ReadVisible);
+    Managed_Scope scope = buffer_get_managed_scope(app, buffer_id);
+    Command_Map_ID* map_id_ptr = scope_attachment(app, scope, buffer_map_id, Command_Map_ID);
+    *map_id_ptr = new_mapid;
+}
+
 static char cjh_get_char_from_user(Application_Links *app)
 {
     User_Input in = {};
@@ -131,17 +228,14 @@ static bool cjh_in_normal_mode()
     return cjh_command_mode == CjhCommandMode_Normal;
 }
 
+static bool cjh_in_visual_line_mode()
+{
+    return cjh_command_mode == CjhCommandMode_VisualLine;
+}
+
 static bool cjh_in_insert_mode()
 {
     return cjh_command_mode == CjhCommandMode_Insert;
-}
-
-static void cjh_set_command_map(Application_Links *app, Command_Map_ID new_mapid)
-{
-    Buffer_ID buffer_id = view_get_buffer(app, get_active_view(app, Access_ReadVisible), Access_ReadVisible);
-    Managed_Scope scope = buffer_get_managed_scope(app, buffer_id);
-    Command_Map_ID* map_id_ptr = scope_attachment(app, scope, buffer_map_id, Command_Map_ID);
-    *map_id_ptr = new_mapid;
 }
 
 CUSTOM_COMMAND_SIG(cjh_enter_normal_mode)
@@ -152,6 +246,8 @@ CUSTOM_COMMAND_SIG(cjh_enter_normal_mode)
     {
         cjh_toggle_status_panel(app);
     }
+
+    global_config.highlight_range = 0;
 }
 
 CUSTOM_COMMAND_SIG(cjh_enter_insert_mode)
@@ -272,6 +368,30 @@ static i64 cjh_get_cursor_pos(Application_Links *app)
     return result;
 }
 
+static void cjh_draw_cursor_mark_highlight(Application_Links *app, View_ID view_id, bool is_active_view,
+                               Buffer_ID buffer, Text_Layout_ID text_layout_id, f32 roundness,
+                               f32 outline_thickness)
+{
+    bool has_highlight_range = draw_highlight_range(app, view_id, buffer, text_layout_id, roundness);
+    if (!has_highlight_range)
+    {
+        switch (cjh_command_mode)
+        {
+            case CjhCommandMode_Normal:
+            {
+            } break;
+
+            case CjhCommandMode_Insert:
+            {
+            } break;
+
+            case CjhCommandMode_VisualLine:
+            {
+            } break;
+        }
+    }
+}
+
 #include "chogan_hooks.cpp"
 
 CUSTOM_COMMAND_SIG(cjh_move_right_and_enter_insert_mode)
@@ -303,6 +423,11 @@ static void cjh_write_key_to_status_panel(Application_Links *app)
     char *key_name = key_code_name[in.event.key.code];
     write_text(app, SCu8(key_name));
     write_text(app, SCu8(" "));
+#if 0
+    char s[32];
+    sprintf(s, "View_ID: %d ", cjh_status_panel_view_id);
+    write_text(app, SCu8(s));
+#endif
     view_set_active(app, saved_view);
 }
 
@@ -423,13 +548,6 @@ CUSTOM_COMMAND_SIG(cjh_repeat_last_find_cmd)
     cjh_find_cmd(app, target, dir, til);
 }
 
-#define CJH_START_MULTI_KEY_CMD(category)                  \
-    CUSTOM_COMMAND_SIG(cjh_start_multi_key_cmd_##category) \
-    {                                                      \
-        cjh_set_command_map(app, cjh_mapid_##category);    \
-        cjh_write_key_to_status_panel(app);                \
-    }
-
 #define CJH_COMMAND_AND_ENTER_NORMAL_MODE(cmd) \
     CUSTOM_COMMAND_SIG(cjh_##cmd)              \
     {                                          \
@@ -442,20 +560,6 @@ CUSTOM_COMMAND_SIG(cjh_repeat_last_find_cmd)
     SelectMapping(mapping);                         \
     SelectMap(cmd_map_id);                          \
     Bind(cjh_enter_normal_mode, KeyCode_Escape)
-
-CJH_START_MULTI_KEY_CMD(space)
-CJH_START_MULTI_KEY_CMD(buffer)
-CJH_START_MULTI_KEY_CMD(file)
-CJH_START_MULTI_KEY_CMD(window)
-CJH_START_MULTI_KEY_CMD(toggle)
-CJH_START_MULTI_KEY_CMD(comma)
-CJH_START_MULTI_KEY_CMD(macro)
-CJH_START_MULTI_KEY_CMD(snippet)
-CJH_START_MULTI_KEY_CMD(quit)
-CJH_START_MULTI_KEY_CMD(c)
-CJH_START_MULTI_KEY_CMD(d)
-CJH_START_MULTI_KEY_CMD(g)
-CJH_START_MULTI_KEY_CMD(y)
 
 // Buffer commands
 CJH_COMMAND_AND_ENTER_NORMAL_MODE(kill_buffer)
@@ -594,11 +698,12 @@ static void cjh_insert_snippet(Application_Links *app, char *snippet_name)
     CUSTOM_COMMAND_SIG(cjh_insert_snippet_##name) \
     {                                             \
         cjh_insert_snippet(app, #name);           \
-        cjh_enter_normal_mode(app);               \
+        cjh_enter_insert_mode(app);               \
     }
 
 CJH_DEFINE_INSERT_SNIPPET_FUNC(if)
 CJH_DEFINE_INSERT_SNIPPET_FUNC(for)
+CJH_DEFINE_INSERT_SNIPPET_FUNC(case)
 
 static bool cjh_inserting_begin_if0_comment = true;
 
@@ -620,6 +725,7 @@ static void cjh_setup_snippet_mapping(Mapping *mapping, i64 snippet_cmd_map_id)
 {
     CJH_CMD_MAPPING_PREAMBLE(snippet_cmd_map_id);
 
+    Bind(cjh_insert_snippet_case, KeyCode_C);
     Bind(cjh_insert_snippet_if, KeyCode_I);
     Bind(cjh_insert_snippet_for, KeyCode_F);
     Bind(cjh_snippet_lister, KeyCode_S);
@@ -808,6 +914,15 @@ CUSTOM_COMMAND_SIG(cjh_insert_newline_below)
     cjh_enter_normal_mode(app);
 }
 
+// Visual Line Mode Commands
+static void cjh_setup_visual_line_mode_mapping(Mapping *mapping, i64 visual_line_mode_cmd_map_id)
+{
+    CJH_CMD_MAPPING_PREAMBLE(visual_line_mode_cmd_map_id);
+
+    ParentMap(cjh_mapid_normal_mode);
+}
+
+// Space Commands
 static void cjh_setup_space_mapping(Mapping *mapping, i64 space_cmd_map_id)
 {
     CJH_CMD_MAPPING_PREAMBLE(space_cmd_map_id);
@@ -918,6 +1033,14 @@ static u8 cjh_get_character_at_cursor(Application_Links *app)
 
     return result;
 }
+CUSTOM_COMMAND_SIG(cjh_insert_semicolon_at_eol)
+{
+    View_ID view = get_active_view(app, Access_ReadWrite);
+    i64 saved_pos = view_get_cursor_pos(app, view);
+    seek_end_of_line(app);
+    write_text(app, SCu8(";"));
+    view_set_cursor(app, view, seek_pos(saved_pos));
+}
 
 CUSTOM_COMMAND_SIG(cjh_toggle_upper_lower)
 {
@@ -943,12 +1066,16 @@ CUSTOM_COMMAND_SIG(cjh_toggle_upper_lower)
 
 CJH_COMMAND_AND_ENTER_NORMAL_MODE(keyboard_macro_replay)
 
-
 static void cjh_setup_normal_mode_mapping(Mapping *mapping, i64 normal_mode_id)
 {
     MappingScope();
     SelectMapping(mapping);
     SelectMap(normal_mode_id);
+
+    BindMouseWheel(mouse_wheel_scroll);
+    BindMouse(click_set_cursor_and_mark, MouseCode_Left);
+    BindMouseRelease(click_set_cursor, MouseCode_Left);
+    BindMouseMove(click_set_cursor_if_lbutton);
 
     // a-z
     Bind(cjh_move_right_and_enter_insert_mode, KeyCode_A);
@@ -963,7 +1090,7 @@ static void cjh_setup_normal_mode_mapping(Mapping *mapping, i64 normal_mode_id)
     Bind(move_down, KeyCode_J);
     Bind(move_up, KeyCode_K);
     Bind(move_right, KeyCode_L);
-    // Bind(cjh_store_mark, KeyCode_M);
+    Bind(cursor_mark_swap, KeyCode_M);
     // Bind(cjh_isearch_next, KeyCode_N);
     Bind(cjh_open_newline_below, KeyCode_O);
     Bind(paste, KeyCode_P);
@@ -972,15 +1099,15 @@ static void cjh_setup_normal_mode_mapping(Mapping *mapping, i64 normal_mode_id)
     // Bind(kmacro_start_macro_or_insert_counter, KeyCode_S);
     Bind(cjh_find_forward_til, KeyCode_T);
     Bind(undo, KeyCode_U);
-    // Bind(cjh_visual_state, KeyCode_V);
+    // Bind(cjh_start_multi_key_cmd_visual_mode, KeyCode_V);
     Bind(cjh_move_right_word, KeyCode_W);
     Bind(delete_char, KeyCode_X);
     Bind(cjh_start_multi_key_cmd_y, KeyCode_Y);
-    // Bind(AVAILABLE, KeyCode_Z);
+    // Bind( , KeyCode_Z);
 
     Bind(cjh_start_multi_key_cmd_space, KeyCode_Space);
     Bind(cjh_start_multi_key_cmd_comma, KeyCode_Comma);
-    // (define-key cjh-keymap (kbd "TAB") 'indent-for-tab-command)
+    // Bind(cjh_indent_for_tab_command, KeyCode_Tab);
 
     // A-Z
     Bind(cjh_eol_insert, KeyCode_A, KeyCode_Shift);
@@ -1005,7 +1132,7 @@ static void cjh_setup_normal_mode_mapping(Mapping *mapping, i64 normal_mode_id)
     // Bind(AVAILABLE, KeyCode_S, KeyCode_Shift);
     Bind(cjh_find_backward_til, KeyCode_T, KeyCode_Shift);
     // Bind(AVAILABLE, KeyCode_U, KeyCode_Shift);
-    // Bind(cjh_start_visual_line_selection, KeyCode_V, KeyCode_Shift);
+    Bind(cjh_start_multi_key_cmd_visual_line_mode, KeyCode_V, KeyCode_Shift);
     Bind(move_right_whitespace_boundary, KeyCode_W, KeyCode_Shift);
     Bind(backspace_char, KeyCode_X, KeyCode_Shift);
     // Bind(AVAILABLE, KeyCode_Y, KeyCode_Shift);
@@ -1018,7 +1145,6 @@ static void cjh_setup_normal_mode_mapping(Mapping *mapping, i64 normal_mode_id)
     Bind(move_up_to_blank_line, KeyCode_LeftBracket, KeyCode_Shift);
     Bind(move_down_to_blank_line, KeyCode_RightBracket, KeyCode_Shift);
     Bind(cjh_toggle_upper_lower, KeyCode_Tick, KeyCode_Shift);
-    // `
     // !
     // @
     // #
@@ -1039,13 +1165,14 @@ static void cjh_setup_normal_mode_mapping(Mapping *mapping, i64 normal_mode_id)
     // :
 
     // Special characters
+    // `
     // -
     // =
     // backslash
     Bind(search, KeyCode_ForwardSlash);
     Bind(cjh_repeat_last_find_cmd, KeyCode_Semicolon);
-    // (define-key cjh-keymap "'" 'cjh-goto-mark)
-    // (define-key cjh-keymap "." 'cjh-repeat-last-command)
+    // Bind(cjh_goto_mark, KeyCode_Quote);
+    // Bind(cjh_repeat_last_modification, KeyCode_Period);
 
     // Control-<a-z>
     // TODO(cjh): Put the cursor in the middle of the screen?
@@ -1054,7 +1181,8 @@ static void cjh_setup_normal_mode_mapping(Mapping *mapping, i64 normal_mode_id)
     Bind(page_up, KeyCode_U, KeyCode_Control);
     // (define-key cjh-keymap (kbd "C-o") 'pop-to-mark-command)
     // C-v
-    // (define-key cjh-keymap (kbd "C-;") 'cjh-insert-semicolon-at-eol)
+    Bind(set_mark, KeyCode_Space, KeyCode_Control);
+    Bind(cjh_insert_semicolon_at_eol, KeyCode_Semicolon, KeyCode_Control);
 
     // TODO(chogan): Surround with ("[{'
 }
@@ -1189,7 +1317,7 @@ static void cjh_setup_insert_mode_mapping(Mapping *mapping, i64 global_id, i64 f
     Bind(move_right_alpha_numeric_boundary,          KeyCode_Right, KeyCode_Control);
     Bind(move_left_alpha_numeric_or_camel_boundary,  KeyCode_Left, KeyCode_Alt);
     Bind(move_right_alpha_numeric_or_camel_boundary, KeyCode_Right, KeyCode_Alt);
-    Bind(comment_line_toggle,        KeyCode_Semicolon, KeyCode_Control);
+    Bind(cjh_insert_semicolon_at_eol, KeyCode_Semicolon, KeyCode_Control);
     Bind(word_complete,              KeyCode_Tab);
     Bind(auto_indent_range,          KeyCode_Tab, KeyCode_Control);
     Bind(auto_indent_line_at_cursor, KeyCode_Tab, KeyCode_Shift);
@@ -1229,11 +1357,15 @@ custom_layer_init(Application_Links *app){
     initialize_managed_id_metadata(app);
     set_default_color_scheme(app);
 
-    // NOTE(cjh): Setup custom hooks, command maps, and keybindings.
     cjh_set_hooks(app);
+
+    // NOTE(cjh): Multi key command hooks
+    cjh_multi_key_cmd_hooks.cjh_visual_line_mode_hook = cjh_visual_line_mode_hook;
+
     mapping_init(tctx, &framework_mapping);
     cjh_setup_insert_mode_mapping(&framework_mapping, mapid_global, mapid_file, mapid_code);
     cjh_setup_normal_mode_mapping(&framework_mapping, cjh_mapid_normal_mode);
+    cjh_setup_visual_line_mode_mapping(&framework_mapping, cjh_mapid_visual_line_mode);
     cjh_setup_space_mapping(&framework_mapping, cjh_mapid_space);
     cjh_setup_buffer_mapping(&framework_mapping, cjh_mapid_buffer);
     cjh_setup_file_mapping(&framework_mapping, cjh_mapid_file);

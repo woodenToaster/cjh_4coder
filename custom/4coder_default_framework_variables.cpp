@@ -30,6 +30,7 @@ CUSTOM_ID(command_map, mapid_global);
 CUSTOM_ID(command_map, mapid_file);
 CUSTOM_ID(command_map, mapid_code);
 CUSTOM_ID(command_map, cjh_mapid_normal_mode);
+CUSTOM_ID(command_map, cjh_mapid_visual_line_mode);
 CUSTOM_ID(command_map, cjh_mapid_space);
 CUSTOM_ID(command_map, cjh_mapid_buffer);
 CUSTOM_ID(command_map, cjh_mapid_file);

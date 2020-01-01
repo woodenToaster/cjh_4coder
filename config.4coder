@@ -47,6 +47,7 @@ indent_width = 4;
 // Theme
 default_theme_name = "theme-spacemacs";
 highlight_line_at_cursor = true;
+highlight_range = false;
 
 // Font
 default_font_name = "liberation-mono.ttf";

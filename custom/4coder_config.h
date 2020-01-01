@@ -216,7 +216,8 @@ struct Config_Data{
     String_Const_u8 default_theme_name;
     
     b8 highlight_line_at_cursor;
-    
+    b8 highlight_range;
+
     u8 default_font_name_space[256];
     String_Const_u8 default_font_name;
     i32 default_font_size;

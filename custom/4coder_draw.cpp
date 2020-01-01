@@ -155,6 +155,20 @@ draw_character_i_bar(Application_Links *app, Text_Layout_ID layout, i64 pos, FCo
 }
 
 function void
+draw_underbar_cursor(Application_Links *app, Text_Layout_ID layout, i64 pos, ARGB_Color color){
+    Rect_f32 rect = text_layout_character_on_screen(app, layout, pos);
+    rect.y0 = rect.y0 + rect.y1 - 1;
+    rect.y1 = rect.y0 + 1.0f;
+    draw_rectangle(app, rect, 0.f, color);
+}
+
+function void
+draw_underbar_cursor(Application_Links *app, Text_Layout_ID layout, i64 pos, FColor color){
+    ARGB_Color argb = fcolor_resolve(color);
+    draw_character_i_bar(app, layout, pos, argb);
+}
+
+function void
 draw_line_highlight(Application_Links *app, Text_Layout_ID layout, Range_i64 line_range, ARGB_Color color){
     Range_f32 y1 = text_layout_line_on_screen(app, layout, line_range.min);
     Range_f32 y2 = text_layout_line_on_screen(app, layout, line_range.max);
@@ -714,6 +728,21 @@ draw_original_4coder_style_cursor_mark_highlight(Application_Links *app, View_ID
     if (!has_highlight_range){
         i64 cursor_pos = view_get_cursor_pos(app, view_id);
         i64 mark_pos = view_get_mark_pos(app, view_id);
+
+        if (cursor_pos != mark_pos && global_config.highlight_range){
+            Range_i64 range;
+            if (cjh_in_visual_line_mode())
+            {
+                range = cjh_visual_line_mode_range;
+            }
+            else
+            {
+                range = Ii64(cursor_pos, mark_pos);
+            }
+            draw_character_block(app, text_layout_id, range, roundness,
+                                 fcolor_id(defcolor_highlight));
+        }
+
         if (is_active_view){
             draw_character_block(app, text_layout_id, cursor_pos, roundness,
                                  fcolor_id(defcolor_normal_cursor));
@@ -742,9 +771,9 @@ draw_notepad_style_cursor_highlight(Application_Links *app, View_ID view_id,
     if (!has_highlight_range){
         i64 cursor_pos = view_get_cursor_pos(app, view_id);
         i64 mark_pos = view_get_mark_pos(app, view_id);
-        if (cursor_pos != mark_pos){
+        if (cursor_pos != mark_pos && global_config.highlight_range){
             Range_i64 range = Ii64(cursor_pos, mark_pos);
-            draw_character_block(app, text_layout_id, range, roundness, 
+            draw_character_block(app, text_layout_id, range, roundness,
                                  fcolor_id(defcolor_highlight));
             paint_text_color_fcolor(app, text_layout_id, range,
                              fcolor_id(defcolor_at_highlight));
