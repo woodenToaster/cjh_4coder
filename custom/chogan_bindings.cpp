@@ -6,7 +6,8 @@
 // - Visual mode
 // - '.' for repeat last command
 // - " /" for project wide search
-// = '/' for file search
+// - '/' for file search
+// - Keep minibuffer open for displaying messages?
 // - Syntax highlighting for type names
 // - Jump to panel by number (" w1", " w3", etc.)
 // - Layouts
@@ -28,11 +29,28 @@ enum CjhCommandMode
     CjhCommandMode_Insert,
 };
 
+enum CjhFindDir
+{
+    CjhFindDir_Forward,
+    CjhFindDir_Backward
+};
+
 static CjhCommandMode cjh_command_mode;
-static u64 cjh_last_time_f_press = 0;
+static u64 cjh_last_time_f_press;
 static u64 cjh_fd_escape_delay_us = 500 * 1000;
+static u8 cjh_last_f_search;
+static CjhFindDir cjh_last_find_dir;
+static bool cjh_last_find_was_til;
 
 // Helpers
+static Buffer_ID cjh_get_active_buffer(Application_Links *app)
+{
+    View_ID view = get_active_view(app, Access_ReadWrite);
+    Buffer_ID result = view_get_buffer(app, view, Access_ReadWrite);
+
+    return result;
+}
+
 static View_ID cjh_open_status_panel(Application_Links *app)
 {
     if (cjh_status_panel_view_id == 0){
@@ -791,7 +809,126 @@ CUSTOM_COMMAND_SIG(cjh_toggle_upper_lower)
         write_text(app, SCu8(&new_char, 1));
     }
 }
+
 CJH_COMMAND_AND_ENTER_NORMAL_MODE(keyboard_macro_replay)
+
+
+static void cjh_find_cmd(Application_Links *app, u8 target, CjhFindDir dir, bool til)
+{
+    View_ID view = get_active_view(app, Access_ReadWrite);
+    Buffer_ID buffer = view_get_buffer(app, view, Access_ReadWrite);
+    // TODO(cjh): Only works with ASCII
+    i64 end = buffer_get_size(app, buffer);
+    i64 starting_cursor_pos = view_get_cursor_pos(app, view);
+    i64 cursor_pos = starting_cursor_pos;
+    seek_beginning_of_line(app);
+    i64 beg_of_line = view_get_cursor_pos(app, view);
+    view_set_cursor(app, view, seek_pos(cursor_pos));
+
+    u8 at;
+    switch (dir)
+    {
+        case CjhFindDir_Forward:
+        {
+            cursor_pos++;
+            do
+            {
+                at = buffer_get_char(app, buffer, cursor_pos);
+                if (at == target)
+                {
+                    if (til)
+                    {
+                        if (cursor_pos - 1 == starting_cursor_pos)
+                        {
+                            cursor_pos++;
+                            continue;
+                        }
+                        view_set_cursor(app, view, seek_pos(cursor_pos - 1));
+                    }
+                    else
+                    {
+                        view_set_cursor(app, view, seek_pos(cursor_pos));
+                    }
+                    break;
+                }
+                cursor_pos++;
+
+            } while (at != '\n' && cursor_pos < end);
+        } break;
+
+        case CjhFindDir_Backward:
+        {
+            cursor_pos--;
+            do
+            {
+                at = buffer_get_char(app, buffer, cursor_pos);
+                if (at == target)
+                {
+                    if (til)
+                    {
+                        if (cursor_pos + 1 == starting_cursor_pos)
+                        {
+                            cursor_pos--;
+                            continue;
+                        }
+                        view_set_cursor(app, view, seek_pos(cursor_pos + 1));
+                    }
+                    else
+                    {
+                        view_set_cursor(app, view, seek_pos(cursor_pos));
+                    }
+                    break;
+                }
+                cursor_pos--;
+
+            } while (cursor_pos >= beg_of_line);
+        } break;
+    }
+}
+
+CUSTOM_COMMAND_SIG(cjh_find_forward)
+{
+    char target = cjh_get_char_from_user(app);
+    cjh_last_f_search = target;
+    cjh_last_find_dir = CjhFindDir_Forward;
+    cjh_last_find_was_til = false;
+    cjh_find_cmd(app, target, CjhFindDir_Forward, false);
+}
+
+CUSTOM_COMMAND_SIG(cjh_find_backward)
+{
+    char target = cjh_get_char_from_user(app);
+    cjh_last_f_search = target;
+    cjh_last_find_dir = CjhFindDir_Backward;
+    cjh_last_find_was_til = false;
+    cjh_find_cmd(app, target, CjhFindDir_Backward, false);
+}
+
+CUSTOM_COMMAND_SIG(cjh_find_forward_til)
+{
+    char target = cjh_get_char_from_user(app);
+    cjh_last_f_search = target;
+    cjh_last_find_dir = CjhFindDir_Forward;
+    cjh_last_find_was_til = true;
+    cjh_find_cmd(app, target, CjhFindDir_Forward, true);
+}
+
+CUSTOM_COMMAND_SIG(cjh_find_backward_til)
+{
+    char target = cjh_get_char_from_user(app);
+    cjh_last_f_search = target;
+    cjh_last_find_dir = CjhFindDir_Backward;
+    cjh_last_find_was_til = true;
+    cjh_find_cmd(app, target, CjhFindDir_Backward, true);
+}
+
+CUSTOM_COMMAND_SIG(cjh_repeat_last_find_cmd)
+{
+    char target = cjh_last_f_search;
+    CjhFindDir dir = cjh_last_find_dir;
+    bool til = cjh_last_find_was_til;
+    cjh_find_cmd(app, target, dir, til);
+}
 
 static void cjh_setup_normal_mode_mapping(Mapping *mapping, i64 normal_mode_id)
 {
@@ -805,7 +942,7 @@ static void cjh_setup_normal_mode_mapping(Mapping *mapping, i64 normal_mode_id)
     Bind(cjh_start_multi_key_cmd_c, KeyCode_C);
     Bind(cjh_start_multi_key_cmd_d, KeyCode_D);
     Bind(cjh_move_to_end_of_word, KeyCode_E);
-    // Bind(cjh_find_forward, KeyCode_F);
+    Bind(cjh_find_forward, KeyCode_F);
     Bind(move_left, KeyCode_H);
     Bind(cjh_start_multi_key_cmd_g, KeyCode_G);
     Bind(cjh_enter_insert_mode, KeyCode_I);
@@ -819,7 +956,7 @@ static void cjh_setup_normal_mode_mapping(Mapping *mapping, i64 normal_mode_id)
     // Bind(cjh_quit_isearch_highlight, KeyCode_Q);
     Bind(cjh_replace_char, KeyCode_R);
     // Bind(kmacro_start_macro_or_insert_counter, KeyCode_S);
-    // Bind(cjh_find_forward_till, KeyCode_T);
+    Bind(cjh_find_forward_til, KeyCode_T);
     Bind(undo, KeyCode_U);
     // Bind(cjh_visual_state, KeyCode_V);
     Bind(cjh_move_right_word, KeyCode_W);
@@ -837,7 +974,7 @@ static void cjh_setup_normal_mode_mapping(Mapping *mapping, i64 normal_mode_id)
     Bind(cjh_change_to_eol, KeyCode_C, KeyCode_Shift);
     Bind(cjh_delete_to_eol, KeyCode_D, KeyCode_Shift);
     // Bind(AVAILABLE, KeyCode_E, KeyCode_Shift);
-    // Bind(cjh_find_backward, KeyCode_F, KeyCode_Shift);
+    Bind(cjh_find_backward, KeyCode_F, KeyCode_Shift);
     Bind(goto_end_of_file, KeyCode_G, KeyCode_Shift);
     // Bind(AVAILABLE, KeyCode_H, KeyCode_Shift);
     Bind(cjh_insert_beginning_of_line, KeyCode_I, KeyCode_Shift);
@@ -852,7 +989,7 @@ static void cjh_setup_normal_mode_mapping(Mapping *mapping, i64 normal_mode_id)
     // TODO(cjh): Only works once
     Bind(cjh_keyboard_macro_replay, KeyCode_R, KeyCode_Shift);
     // Bind(AVAILABLE, KeyCode_S, KeyCode_Shift);
-    // Bind(cjh_find_backward_till, KeyCode_T, KeyCode_Shift);
+    Bind(cjh_find_backward_til, KeyCode_T, KeyCode_Shift);
     // Bind(AVAILABLE, KeyCode_U, KeyCode_Shift);
     // Bind(cjh_start_visual_line_selection, KeyCode_V, KeyCode_Shift);
     Bind(move_right_whitespace_boundary, KeyCode_W, KeyCode_Shift);
@@ -892,7 +1029,7 @@ static void cjh_setup_normal_mode_mapping(Mapping *mapping, i64 normal_mode_id)
     // =
     // backslash
     Bind(search, KeyCode_ForwardSlash);
-    // (define-key cjh-keymap ";" 'cjh-repeat-last-find)
+    Bind(cjh_repeat_last_find_cmd, KeyCode_Semicolon);
     // (define-key cjh-keymap "'" 'cjh-goto-mark)
     // (define-key cjh-keymap "." 'cjh-repeat-last-command)
 
