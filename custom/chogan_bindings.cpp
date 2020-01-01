@@ -14,6 +14,8 @@
 
 // TODO(chogan): Bugs
 // 'e' doesn't work in comments
+// Scratch buffer has same ID as status panel?
+// Commands like df<char> and ct<char> stop 1 char early
 
 #if !defined(FCODER_CHOGAN_BINDINGS_CPP)
 #define FCODER_CHOGAN_BINDINGS_CPP
@@ -43,6 +45,36 @@ static CjhFindDir cjh_last_find_dir;
 static bool cjh_last_find_was_til;
 
 // Helpers
+static char cjh_get_char_from_user(Application_Links *app)
+{
+    User_Input in = {};
+    char result = '\0';
+    bool done = false;
+    while (!done)
+    {
+        in = get_next_input(app, EventProperty_TextInsert,
+                            EventProperty_Escape|EventProperty_ViewActivation);
+        if (in.abort)
+        {
+            break;
+        }
+
+        switch(in.event.kind)
+        {
+            case InputEventKind_TextInsert:
+            {
+                String_Const_u8 string = to_writable(&in);
+                result = string.str[0];
+                done = true;
+            } break;
+            default:
+                continue;
+        }
+    }
+
+    return result;
+}
+
 static Buffer_ID cjh_get_active_buffer(Application_Links *app)
 {
     View_ID view = get_active_view(app, Access_ReadWrite);
@@ -272,6 +304,123 @@ static void cjh_write_key_to_status_panel(Application_Links *app)
     write_text(app, SCu8(key_name));
     write_text(app, SCu8(" "));
     view_set_active(app, saved_view);
+}
+
+static void cjh_find_cmd(Application_Links *app, u8 target, CjhFindDir dir, bool til)
+{
+    View_ID view = get_active_view(app, Access_ReadWrite);
+    Buffer_ID buffer = view_get_buffer(app, view, Access_ReadWrite);
+    // TODO(cjh): Only works with ASCII
+    i64 end = buffer_get_size(app, buffer);
+    i64 starting_cursor_pos = view_get_cursor_pos(app, view);
+    i64 cursor_pos = starting_cursor_pos;
+    seek_beginning_of_line(app);
+    i64 beg_of_line = view_get_cursor_pos(app, view);
+    view_set_cursor(app, view, seek_pos(cursor_pos));
+
+    u8 at;
+    switch (dir)
+    {
+        case CjhFindDir_Forward:
+        {
+            cursor_pos++;
+            do
+            {
+                at = buffer_get_char(app, buffer, cursor_pos);
+                if (at == target)
+                {
+                    if (til)
+                    {
+                        if (cursor_pos - 1 == starting_cursor_pos)
+                        {
+                            cursor_pos++;
+                            continue;
+                        }
+                        view_set_cursor(app, view, seek_pos(cursor_pos - 1));
+                    }
+                    else
+                    {
+                        view_set_cursor(app, view, seek_pos(cursor_pos));
+                    }
+                    break;
+                }
+                cursor_pos++;
+
+            } while (at != '\n' && cursor_pos < end);
+        } break;
+
+        case CjhFindDir_Backward:
+        {
+            cursor_pos--;
+            do
+            {
+                at = buffer_get_char(app, buffer, cursor_pos);
+                if (at == target)
+                {
+                    if (til)
+                    {
+                        if (cursor_pos + 1 == starting_cursor_pos)
+                        {
+                            cursor_pos--;
+                            continue;
+                        }
+                        view_set_cursor(app, view, seek_pos(cursor_pos + 1));
+                    }
+                    else
+                    {
+                        view_set_cursor(app, view, seek_pos(cursor_pos));
+                    }
+                    break;
+                }
+                cursor_pos--;
+
+            } while (cursor_pos >= beg_of_line);
+        } break;
+    }
+}
+
+CUSTOM_COMMAND_SIG(cjh_find_forward)
+{
+    char target = cjh_get_char_from_user(app);
+    cjh_last_f_search = target;
+    cjh_last_find_dir = CjhFindDir_Forward;
+    cjh_last_find_was_til = false;
+    cjh_find_cmd(app, target, CjhFindDir_Forward, false);
+}
+
+CUSTOM_COMMAND_SIG(cjh_find_backward)
+{
+    char target = cjh_get_char_from_user(app);
+    cjh_last_f_search = target;
+    cjh_last_find_dir = CjhFindDir_Backward;
+    cjh_last_find_was_til = false;
+    cjh_find_cmd(app, target, CjhFindDir_Backward, false);
+}
+
+CUSTOM_COMMAND_SIG(cjh_find_forward_til)
+{
+    char target = cjh_get_char_from_user(app);
+    cjh_last_f_search = target;
+    cjh_last_find_dir = CjhFindDir_Forward;
+    cjh_last_find_was_til = true;
+    cjh_find_cmd(app, target, CjhFindDir_Forward, true);
+}
+
+CUSTOM_COMMAND_SIG(cjh_find_backward_til)
+{
+    char target = cjh_get_char_from_user(app);
+    cjh_last_f_search = target;
+    cjh_last_find_dir = CjhFindDir_Backward;
+    cjh_last_find_was_til = true;
+    cjh_find_cmd(app, target, CjhFindDir_Backward, true);
+}
+
+CUSTOM_COMMAND_SIG(cjh_repeat_last_find_cmd)
+{
+    char target = cjh_last_f_search;
+    CjhFindDir dir = cjh_last_find_dir;
+    bool til = cjh_last_find_was_til;
+    cjh_find_cmd(app, target, dir, til);
 }
 
 #define CJH_START_MULTI_KEY_CMD(category)                  \
@@ -506,6 +655,10 @@ CJH_CHANGE_COMMAND(move_right_whitespace_boundary)
 CJH_CHANGE_COMMAND(move_left_token_boundary)
 CJH_CHANGE_COMMAND(move_left_whitespace_boundary)
 CJH_CHANGE_COMMAND(cjh_move_to_end_of_word)
+CJH_CHANGE_COMMAND(cjh_find_forward)
+CJH_CHANGE_COMMAND(cjh_find_backward)
+CJH_CHANGE_COMMAND(cjh_find_forward_til)
+CJH_CHANGE_COMMAND(cjh_find_backward_til)
 
 static void cjh_setup_c_mapping(Mapping *mapping, i64 c_cmd_map_id)
 {
@@ -514,10 +667,10 @@ static void cjh_setup_c_mapping(Mapping *mapping, i64 c_cmd_map_id)
     Bind(move_left_token_boundary_c, KeyCode_B);
     Bind(move_left_whitespace_boundary_c, KeyCode_B, KeyCode_Shift);
     Bind(cjh_move_to_end_of_word_c, KeyCode_E);
-    // f
-    // F
-    // t
-    // T
+    Bind(cjh_find_forward_c, KeyCode_F);
+    Bind(cjh_find_backward_c, KeyCode_F, KeyCode_Shift);
+    Bind(cjh_find_forward_til_c, KeyCode_T);
+    Bind(cjh_find_backward_til_c, KeyCode_T, KeyCode_Shift);
     Bind(cjh_move_right_word_c, KeyCode_W);
     Bind(move_right_whitespace_boundary_c, KeyCode_W, KeyCode_Shift);
 }
@@ -539,6 +692,10 @@ CJH_DELETE_COMMAND(move_right_whitespace_boundary)
 CJH_DELETE_COMMAND(move_left_token_boundary)
 CJH_DELETE_COMMAND(move_left_whitespace_boundary)
 CJH_DELETE_COMMAND(cjh_move_to_end_of_word)
+CJH_DELETE_COMMAND(cjh_find_forward)
+CJH_DELETE_COMMAND(cjh_find_backward)
+CJH_DELETE_COMMAND(cjh_find_forward_til)
+CJH_DELETE_COMMAND(cjh_find_backward_til)
 
 static void cjh_setup_d_mapping(Mapping *mapping, i64 d_cmd_map_id)
 {
@@ -548,10 +705,10 @@ static void cjh_setup_d_mapping(Mapping *mapping, i64 d_cmd_map_id)
     Bind(move_left_whitespace_boundary_d, KeyCode_B, KeyCode_Shift);
     Bind(cjh_delete_line, KeyCode_D);
     Bind(cjh_move_to_end_of_word_d, KeyCode_E);
-    // f
-    // F
-    // t
-    // T
+    Bind(cjh_find_forward_d, KeyCode_F);
+    Bind(cjh_find_backward_d, KeyCode_F, KeyCode_Shift);
+    Bind(cjh_find_forward_til_d, KeyCode_T);
+    Bind(cjh_find_backward_til_d, KeyCode_T, KeyCode_Shift);
     Bind(cjh_move_right_word_d, KeyCode_W);
     Bind(move_right_whitespace_boundary_d, KeyCode_W, KeyCode_Shift);
 }
@@ -610,6 +767,10 @@ CJH_YANK_COMMAND(move_right_whitespace_boundary)
 CJH_YANK_COMMAND(move_left_token_boundary)
 CJH_YANK_COMMAND(move_left_whitespace_boundary)
 CJH_YANK_COMMAND(cjh_move_to_end_of_word)
+CJH_YANK_COMMAND(cjh_find_forward)
+CJH_YANK_COMMAND(cjh_find_backward)
+CJH_YANK_COMMAND(cjh_find_forward_til)
+CJH_YANK_COMMAND(cjh_find_backward_til)
 
 static void cjh_setup_y_mapping(Mapping *mapping, i64 y_cmd_map_id)
 {
@@ -618,10 +779,10 @@ static void cjh_setup_y_mapping(Mapping *mapping, i64 y_cmd_map_id)
     Bind(move_left_token_boundary_y, KeyCode_B);
     Bind(move_left_whitespace_boundary_y, KeyCode_B, KeyCode_Shift);
     Bind(cjh_move_to_end_of_word_y, KeyCode_E);
-    // f
-    // F
-    // t
-    // T
+    Bind(cjh_find_forward_y, KeyCode_F);
+    Bind(cjh_find_backward_y, KeyCode_F, KeyCode_Shift);
+    Bind(cjh_find_forward_til_y, KeyCode_T);
+    Bind(cjh_find_backward_til_y, KeyCode_T, KeyCode_Shift);
     Bind(cjh_move_right_word_y, KeyCode_W);
     Bind(move_right_whitespace_boundary_y, KeyCode_W, KeyCode_Shift);
     Bind(cjh_yank_whole_line, KeyCode_Y);
@@ -738,36 +899,6 @@ CUSTOM_COMMAND_SIG(cjh_back_to_indentation)
     move_past_lead_whitespace(app, view, buffer);
 }
 
-static char cjh_get_char_from_user(Application_Links *app)
-{
-    User_Input in = {};
-    char result = '\0';
-    bool done = false;
-    while (!done)
-    {
-        in = get_next_input(app, EventProperty_TextInsert,
-                            EventProperty_Escape|EventProperty_ViewActivation);
-        if (in.abort)
-        {
-            break;
-        }
-
-        switch(in.event.kind)
-        {
-            case InputEventKind_TextInsert:
-            {
-                String_Const_u8 string = to_writable(&in);
-                result = string.str[0];
-                done = true;
-            } break;
-            default:
-                continue;
-        }
-    }
-
-    return result;
-}
-
 CUSTOM_COMMAND_SIG(cjh_replace_char)
 {
     char replacement = cjh_get_char_from_user(app);
@@ -812,123 +943,6 @@ CUSTOM_COMMAND_SIG(cjh_toggle_upper_lower)
 
 CJH_COMMAND_AND_ENTER_NORMAL_MODE(keyboard_macro_replay)
 
-
-static void cjh_find_cmd(Application_Links *app, u8 target, CjhFindDir dir, bool til)
-{
-    View_ID view = get_active_view(app, Access_ReadWrite);
-    Buffer_ID buffer = view_get_buffer(app, view, Access_ReadWrite);
-    // TODO(cjh): Only works with ASCII
-    i64 end = buffer_get_size(app, buffer);
-    i64 starting_cursor_pos = view_get_cursor_pos(app, view);
-    i64 cursor_pos = starting_cursor_pos;
-    seek_beginning_of_line(app);
-    i64 beg_of_line = view_get_cursor_pos(app, view);
-    view_set_cursor(app, view, seek_pos(cursor_pos));
-
-    u8 at;
-    switch (dir)
-    {
-        case CjhFindDir_Forward:
-        {
-            cursor_pos++;
-            do
-            {
-                at = buffer_get_char(app, buffer, cursor_pos);
-                if (at == target)
-                {
-                    if (til)
-                    {
-                        if (cursor_pos - 1 == starting_cursor_pos)
-                        {
-                            cursor_pos++;
-                            continue;
-                        }
-                        view_set_cursor(app, view, seek_pos(cursor_pos - 1));
-                    }
-                    else
-                    {
-                        view_set_cursor(app, view, seek_pos(cursor_pos));
-                    }
-                    break;
-                }
-                cursor_pos++;
-
-            } while (at != '\n' && cursor_pos < end);
-        } break;
-
-        case CjhFindDir_Backward:
-        {
-            cursor_pos--;
-            do
-            {
-                at = buffer_get_char(app, buffer, cursor_pos);
-                if (at == target)
-                {
-                    if (til)
-                    {
-                        if (cursor_pos + 1 == starting_cursor_pos)
-                        {
-                            cursor_pos--;
-                            continue;
-                        }
-                        view_set_cursor(app, view, seek_pos(cursor_pos + 1));
-                    }
-                    else
-                    {
-                        view_set_cursor(app, view, seek_pos(cursor_pos));
-                    }
-                    break;
-                }
-                cursor_pos--;
-
-            } while (cursor_pos >= beg_of_line);
-        } break;
-    }
-}
-
-CUSTOM_COMMAND_SIG(cjh_find_forward)
-{
-    char target = cjh_get_char_from_user(app);
-    cjh_last_f_search = target;
-    cjh_last_find_dir = CjhFindDir_Forward;
-    cjh_last_find_was_til = false;
-    cjh_find_cmd(app, target, CjhFindDir_Forward, false);
-}
-
-CUSTOM_COMMAND_SIG(cjh_find_backward)
-{
-    char target = cjh_get_char_from_user(app);
-    cjh_last_f_search = target;
-    cjh_last_find_dir = CjhFindDir_Backward;
-    cjh_last_find_was_til = false;
-    cjh_find_cmd(app, target, CjhFindDir_Backward, false);
-}
-
-CUSTOM_COMMAND_SIG(cjh_find_forward_til)
-{
-    char target = cjh_get_char_from_user(app);
-    cjh_last_f_search = target;
-    cjh_last_find_dir = CjhFindDir_Forward;
-    cjh_last_find_was_til = true;
-    cjh_find_cmd(app, target, CjhFindDir_Forward, true);
-}
-
-CUSTOM_COMMAND_SIG(cjh_find_backward_til)
-{
-    char target = cjh_get_char_from_user(app);
-    cjh_last_f_search = target;
-    cjh_last_find_dir = CjhFindDir_Backward;
-    cjh_last_find_was_til = true;
-    cjh_find_cmd(app, target, CjhFindDir_Backward, true);
-}
-
-CUSTOM_COMMAND_SIG(cjh_repeat_last_find_cmd)
-{
-    char target = cjh_last_f_search;
-    CjhFindDir dir = cjh_last_find_dir;
-    bool til = cjh_last_find_was_til;
-    cjh_find_cmd(app, target, dir, til);
-}
 
 static void cjh_setup_normal_mode_mapping(Mapping *mapping, i64 normal_mode_id)
 {
