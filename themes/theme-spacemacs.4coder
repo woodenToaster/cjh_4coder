@@ -3,6 +3,8 @@ defcolor_back = 0xFF292B2E;
 defcolor_margin = 0xFF212026;
 defcolor_margin_hover = 0xFF333333; // Not modified
 defcolor_margin_active = 0xFF404040; // Not modified
+defcolor_line_numbers_back = defcolor_margin;
+defcolor_line_numbers_text = 0xFF3E4842;
 defcolor_list_item = defcolor_margin; // Not modified
 defcolor_list_item_hover = defcolor_margin_hover; // Not modified
 defcolor_list_item_active = defcolor_margin_active; // Not modified
@@ -15,7 +17,8 @@ defcolor_mark = 0xFF808080;
 defcolor_text_default = 0xFFB2B2B2;
 defcolor_at_highlight = 0xFF90B2A4;
 defcolor_comment = 0xFF28A19B;
-defcolor_comment_pop = {0xFFD0BF7F, 0xFFCC9383}; // {NOTE, TODO}
+// NOTE(cjh): Coloring NOTE and TODO
+defcolor_comment_pop = {0xFFD0BF7F, 0xFFCC9383};
 defcolor_keyword = 0xFF4F97D7;
 defcolor_str_constant = 0xFF2D9574;
 defcolor_char_constant = defcolor_str_constant;
@@ -35,8 +38,7 @@ defcolor_bar_active = FFA8A8A8; // Not modified
 defcolor_base = 0xFF000000; // Not modified
 defcolor_pop1 = 0xFF03CF0C; // Not modified
 defcolor_pop2 = 0xFFFF0000; // Not modified
-defcolor_back_cycle = {0x0CA00000, 0x0800A000, 0x080000A0, 0x08A0A000}; // Not modified
-defcolor_text_cycle = {0xFFA00000, 0xFF00A000, 0xFF0020B0, 0xFFA0A000}; // Not modified
-
-
-
+// NOTE(cjh): Scope highlighting
+defcolor_back_cycle = {0x0CA00000, 0x0800A000, 0x080000A0, 0x08A0A000};
+// NOTE(cjh): Coloring parens
+defcolor_text_cycle = {0xFFBC6EC5, 0xFF2B8569, 0xFF3C86BE, 0xFF8D7428};

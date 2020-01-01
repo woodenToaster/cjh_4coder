@@ -53,14 +53,37 @@ CUSTOM_DOC("At the cursor, insert the text at the top of the clipboard.")
         Scratch_Block scratch(app);
         
         String_Const_u8 string = push_clipboard_index(app, scratch, 0, *paste_index);
+
+        // NOTE(cjh): Check for a newline in the string. If found, we will first
+        // open a newline below the current before pasting.
+        bool has_newline = false;
+        for (int i = 0; i < string.size; ++i)
+        {
+            if (string.str[i] == '\n')
+            {
+                has_newline = true;
+                break;
+            }
+        }
+
         if (string.size > 0){
             Buffer_ID buffer = view_get_buffer(app, view, Access_ReadWriteVisible);
-            
+
+            if (has_newline)
+            {
+                seek_end_of_line(app);
+                write_text(app, SCu8("\n"));
+            }
             i64 pos = view_get_cursor_pos(app, view);
             buffer_replace_range(app, buffer, Ii64(pos), string);
             view_set_mark(app, view, seek_pos(pos));
             view_set_cursor_and_preferred_x(app, view, seek_pos(pos + (i32)string.size));
-            
+            if (has_newline)
+            {
+                // NOTE(cjh): Delete the extra newline we added before pasting
+                backspace_char(app);
+            }
+
             // TODO(allen): Send this to all views.
             ARGB_Color argb = fcolor_resolve(fcolor_id(defcolor_paste));
             view_post_fade(app, view, 0.667f, Ii64_size(pos, string.size), argb);

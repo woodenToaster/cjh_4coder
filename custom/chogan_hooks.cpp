@@ -15,7 +15,7 @@ CUSTOM_DOC("Default command for responding to a startup event")
         if (global_config.automatically_load_project){
             load_project(app);
         }
-        chogan_side_by_side_panels(app);
+        cjh_side_by_side_panels(app);
         load_themes_default_folder(app);
     }
     Color_Table_List *color_table_list = &global_theme_list;
@@ -366,16 +366,17 @@ chogan_render_buffer(Application_Links *app, View_ID view_id, Face_ID face_id,
     f32 cursor_roundness = 1.0f;
     f32 mark_thickness = 2.f;
 
-    if (cjh_in_normal_mode())
+    if (view_id != cjh_status_panel_view_id)
     {
-        draw_original_4coder_style_cursor_mark_highlight(app, view_id, is_active_view, buffer, text_layout_id,
-                                                         cursor_roundness, mark_thickness);
-    }
-    else
-    {
-        // TODO(cjh): Watch for bugs with cursor placement
-        // i64 cursor_pos = view_get_cursor_pos(app, view_id);
-        draw_character_i_bar(app, text_layout_id, cursor_pos, fcolor_id(defcolor_insert_cursor));
+        if (cjh_in_normal_mode())
+        {
+            draw_original_4coder_style_cursor_mark_highlight(app, view_id, is_active_view, buffer, text_layout_id,
+                                                             cursor_roundness, mark_thickness);
+        }
+        else
+        {
+            draw_character_i_bar(app, text_layout_id, cursor_pos, fcolor_id(defcolor_insert_cursor));
+        }
     }
 
     // NOTE(allen): put the actual text on the actual screen
@@ -385,7 +386,7 @@ chogan_render_buffer(Application_Links *app, View_ID view_id, Face_ID face_id,
 }
 
 function void
-chogan_render_caller(Application_Links *app, Frame_Info frame_info, View_ID view_id){
+cjh_render_caller(Application_Links *app, Frame_Info frame_info, View_ID view_id){
     ProfileScope(app, "default render caller");
     View_ID active_view = get_active_view(app, Access_Always);
     b32 is_active_view = (active_view == view_id);
@@ -1097,12 +1098,12 @@ BUFFER_HOOK_SIG(default_end_buffer){
 }
 
 internal void
-chogan_set_hooks(Application_Links *app){
+cjh_set_hooks(Application_Links *app){
     set_custom_hook(app, HookID_BufferViewerUpdate, default_view_adjust);
 
     set_custom_hook(app, HookID_ViewEventHandler, chogan_view_input_handler);
     set_custom_hook(app, HookID_Tick, default_tick);
-    set_custom_hook(app, HookID_RenderCaller, chogan_render_caller);
+    set_custom_hook(app, HookID_RenderCaller, cjh_render_caller);
 #if 0
     set_custom_hook(app, HookID_DeltaRule, original_delta);
     set_custom_hook_memory_size(app, HookID_DeltaRule,
