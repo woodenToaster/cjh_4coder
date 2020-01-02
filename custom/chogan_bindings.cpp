@@ -368,6 +368,19 @@ static i64 cjh_get_cursor_pos(Application_Links *app)
     return result;
 }
 
+static void cjh_draw_underbar_cursor(Application_Links *app, Text_Layout_ID layout, i64 pos, ARGB_Color color)
+{
+    Rect_f32 rect = text_layout_character_on_screen(app, layout, pos);
+    rect.y0 = rect.y1 + 1.0f;
+    draw_rectangle(app, rect, 0.f, color);
+}
+
+static void cjh_draw_underbar_cursor(Application_Links *app, Text_Layout_ID layout, i64 pos, FColor color)
+{
+    ARGB_Color argb = fcolor_resolve(color);
+    cjh_draw_underbar_cursor(app, layout, pos, argb);
+}
+
 static void cjh_draw_cursor_mark_highlight(Application_Links *app, View_ID view_id, bool is_active_view,
                                Buffer_ID buffer, Text_Layout_ID text_layout_id, f32 roundness,
                                f32 outline_thickness)
@@ -375,18 +388,40 @@ static void cjh_draw_cursor_mark_highlight(Application_Links *app, View_ID view_
     bool has_highlight_range = draw_highlight_range(app, view_id, buffer, text_layout_id, roundness);
     if (!has_highlight_range)
     {
+        i64 cursor_pos = view_get_cursor_pos(app, view_id);
+        i64 mark_pos = view_get_mark_pos(app, view_id);
         switch (cjh_command_mode)
         {
             case CjhCommandMode_Normal:
             {
+                if (is_active_view)
+                {
+                    draw_character_block(app, text_layout_id, cursor_pos, roundness,
+                                         fcolor_id(defcolor_normal_cursor));
+                    paint_text_color_pos(app, text_layout_id, cursor_pos, fcolor_id(defcolor_at_cursor));
+                    draw_character_wire_frame(app, text_layout_id, mark_pos, roundness, outline_thickness,
+                                              fcolor_id(defcolor_mark));
+                }
+                else
+                {
+                    draw_character_wire_frame(app, text_layout_id, mark_pos, roundness, outline_thickness,
+                                              fcolor_id(defcolor_mark));
+                    draw_character_wire_frame(app, text_layout_id, cursor_pos, roundness, outline_thickness,
+                                              fcolor_id(defcolor_normal_cursor));
+                }
             } break;
 
             case CjhCommandMode_Insert:
             {
+                draw_character_i_bar(app, text_layout_id, cursor_pos, fcolor_id(defcolor_insert_cursor));
             } break;
 
             case CjhCommandMode_VisualLine:
             {
+                Range_i64 range = cjh_visual_line_mode_range;
+                draw_character_block(app, text_layout_id, cjh_visual_line_mode_range, 1.0f,
+                                     fcolor_id(defcolor_highlight));
+                cjh_draw_underbar_cursor(app, text_layout_id, cursor_pos, f_white);
             } break;
         }
     }

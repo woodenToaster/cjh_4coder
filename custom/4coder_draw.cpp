@@ -155,20 +155,6 @@ draw_character_i_bar(Application_Links *app, Text_Layout_ID layout, i64 pos, FCo
 }
 
 function void
-draw_underbar_cursor(Application_Links *app, Text_Layout_ID layout, i64 pos, ARGB_Color color){
-    Rect_f32 rect = text_layout_character_on_screen(app, layout, pos);
-    rect.y0 = rect.y0 + rect.y1 - 1;
-    rect.y1 = rect.y0 + 1.0f;
-    draw_rectangle(app, rect, 0.f, color);
-}
-
-function void
-draw_underbar_cursor(Application_Links *app, Text_Layout_ID layout, i64 pos, FColor color){
-    ARGB_Color argb = fcolor_resolve(color);
-    draw_character_i_bar(app, layout, pos, argb);
-}
-
-function void
 draw_line_highlight(Application_Links *app, Text_Layout_ID layout, Range_i64 line_range, ARGB_Color color){
     Range_f32 y1 = text_layout_line_on_screen(app, layout, line_range.min);
     Range_f32 y2 = text_layout_line_on_screen(app, layout, line_range.max);
