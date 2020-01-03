@@ -85,7 +85,7 @@ static void cjh_toggle_highlight_range()
     global_config.highlight_range = !global_config.highlight_range;
 }
 
-static void cjh_update_visual_line_mode_range(Application_Links *app)
+static void cjh_begin_visual_line_mode_range(Application_Links *app)
 {
     View_ID view = get_active_view(app, Access_ReadWrite);
     i64 saved_cursor = view_get_cursor_pos(app, view);
@@ -96,14 +96,22 @@ static void cjh_update_visual_line_mode_range(Application_Links *app)
     view_set_cursor(app, view, seek_pos(saved_cursor));
 }
 
+static void cjh_update_visual_line_mode_range(Application_Links *app)
+{
+    View_ID view = get_active_view(app, Access_ReadWrite);
+    i64 saved_cursor = view_get_cursor_pos(app, view);
+    // TODO(cjh): check for start < end
+    seek_end_of_line(app);
+    cjh_visual_line_mode_range.end = view_get_cursor_pos(app, view);
+    view_set_cursor(app, view, seek_pos(saved_cursor));
+}
+
 // Multi key command hooks
 static void cjh_visual_line_mode_hook(Application_Links *app)
 {
     cjh_toggle_highlight_range();
     cjh_command_mode = CjhCommandMode_VisualLine;
-    cjh_update_visual_line_mode_range(app);
-
-
+    cjh_begin_visual_line_mode_range(app);
 }
 
 #define CJH_START_MULTI_KEY_CMD(category)                        \
@@ -949,12 +957,37 @@ CUSTOM_COMMAND_SIG(cjh_insert_newline_below)
     cjh_enter_normal_mode(app);
 }
 
+#define CJH_VISUAL_LINE_MODE_MOTION_COMMAND(motion)       \
+    CUSTOM_COMMAND_SIG(motion##_visual_line_mode)         \
+    {                                                     \
+        motion(app);                                      \
+        cjh_update_visual_line_mode_range(app);           \
+    }
+
+#define CJH_VISUAL_LINE_MODE_EDIT_COMMAND(cmd)   \
+    CUSTOM_COMMAND_SIG(cmd##_visual_line_mode)   \
+    {                                            \
+        cmd(app);                                \
+        cjh_update_visual_line_mode_range(app);  \
+        cjh_enter_normal_mode(app);              \
+    }
+
 // Visual Line Mode Commands
+CJH_VISUAL_LINE_MODE_MOTION_COMMAND(move_left)
+CJH_VISUAL_LINE_MODE_MOTION_COMMAND(move_right)
+CJH_VISUAL_LINE_MODE_MOTION_COMMAND(move_up)
+CJH_VISUAL_LINE_MODE_MOTION_COMMAND(move_down)
+
 static void cjh_setup_visual_line_mode_mapping(Mapping *mapping, i64 visual_line_mode_cmd_map_id)
 {
     CJH_CMD_MAPPING_PREAMBLE(visual_line_mode_cmd_map_id);
 
     ParentMap(cjh_mapid_normal_mode);
+
+    Bind(move_left_visual_line_mode, KeyCode_H);
+    Bind(move_right_visual_line_mode, KeyCode_L);
+    Bind(move_up_visual_line_mode, KeyCode_K);
+    Bind(move_down_visual_line_mode, KeyCode_J);
 }
 
 // Space Commands
