@@ -112,6 +112,7 @@ static void cjh_update_visual_line_mode_range(Application_Links *app)
 
     if (line_number < cjh_prev_visual_line_number)
     {
+        // NOTE(cjh): Moving up
         if (start < cjh_visual_line_mode_range.end)
         {
             cjh_visual_line_mode_range.start = start;
@@ -123,6 +124,7 @@ static void cjh_update_visual_line_mode_range(Application_Links *app)
     }
     else
     {
+        // NOTE(cjh): Moving down
         if (end > cjh_visual_line_mode_range.start)
         {
             cjh_visual_line_mode_range.end = end;
@@ -1023,16 +1025,57 @@ CJH_VISUAL_LINE_MODE_MOTION_COMMAND(move_right)
 CJH_VISUAL_LINE_MODE_MOTION_COMMAND(move_up)
 CJH_VISUAL_LINE_MODE_MOTION_COMMAND(move_down)
 
+static void cjh_delete_visual_line_mode_range(Application_Links *app)
+{
+    View_ID view = get_active_view(app, Access_ReadWrite);
+    Buffer_ID buffer = view_get_buffer(app, view, Access_ReadWrite);
+    buffer_replace_range(app, buffer, cjh_visual_line_mode_range, string_u8_empty);
+}
+
+CUSTOM_COMMAND_SIG(cjh_visual_line_mode_change)
+{
+    cjh_delete_visual_line_mode_range(app);
+    cjh_enter_insert_mode(app);
+}
+
+CUSTOM_COMMAND_SIG(cjh_visual_line_mode_delete)
+{
+    cjh_delete_visual_line_mode_range(app);
+    cjh_enter_normal_mode(app);
+}
+
+CUSTOM_COMMAND_SIG(cjh_visual_line_mode_yank)
+{
+    View_ID view = get_active_view(app, Access_ReadWrite);
+    Buffer_ID buffer = view_get_buffer(app, view, Access_ReadWrite);
+    clipboard_post_buffer_range(app, 0, buffer, cjh_visual_line_mode_range);
+    cjh_enter_normal_mode(app);
+}
+
 static void cjh_setup_visual_line_mode_mapping(Mapping *mapping, i64 visual_line_mode_cmd_map_id)
 {
     CJH_CMD_MAPPING_PREAMBLE(visual_line_mode_cmd_map_id);
 
     ParentMap(cjh_mapid_normal_mode);
 
+    // Motions
     Bind(move_left_visual_line_mode, KeyCode_H);
     Bind(move_right_visual_line_mode, KeyCode_L);
     Bind(move_up_visual_line_mode, KeyCode_K);
     Bind(move_down_visual_line_mode, KeyCode_J);
+    // gb
+    // G
+    // {
+    // }
+    // C-u
+    // C-d
+    // [[
+    // ]]
+
+    // Commands
+    Bind(cjh_visual_line_mode_change, KeyCode_C);
+    Bind(cjh_visual_line_mode_delete, KeyCode_D);
+    Bind(cjh_visual_line_mode_yank, KeyCode_Y);
 }
 
 // Space Commands
