@@ -44,6 +44,7 @@ CUSTOM_ID(command_map, cjh_mapid_snippet);
 CUSTOM_ID(command_map, cjh_mapid_space);
 CUSTOM_ID(command_map, cjh_mapid_toggle);
 CUSTOM_ID(command_map, cjh_mapid_visual_line_mode);
+CUSTOM_ID(command_map, cjh_mapid_visual_mode);
 CUSTOM_ID(command_map, cjh_mapid_window);
 CUSTOM_ID(command_map, cjh_mapid_y);
 

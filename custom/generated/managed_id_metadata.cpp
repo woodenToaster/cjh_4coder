@@ -72,6 +72,7 @@ cjh_mapid_snippet = managed_id_declare(app, string_u8_litexpr("command_map"), st
 cjh_mapid_space = managed_id_declare(app, string_u8_litexpr("command_map"), string_u8_litexpr("cjh_mapid_space"));
 cjh_mapid_toggle = managed_id_declare(app, string_u8_litexpr("command_map"), string_u8_litexpr("cjh_mapid_toggle"));
 cjh_mapid_visual_line_mode = managed_id_declare(app, string_u8_litexpr("command_map"), string_u8_litexpr("cjh_mapid_visual_line_mode"));
+cjh_mapid_visual_mode = managed_id_declare(app, string_u8_litexpr("command_map"), string_u8_litexpr("cjh_mapid_visual_mode"));
 cjh_mapid_window = managed_id_declare(app, string_u8_litexpr("command_map"), string_u8_litexpr("cjh_mapid_window"));
 cjh_mapid_y = managed_id_declare(app, string_u8_litexpr("command_map"), string_u8_litexpr("cjh_mapid_y"));
 }

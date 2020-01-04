@@ -3,8 +3,6 @@
 // TOP
 
 // TODO(chogan): Missing functionality
-// - Visual mode
-//   - Modify commands to act on range
 // - '.' for repeat last command
 //   - Save latest range in keyboard_log_buffer
 // - " /" for project wide search
@@ -32,7 +30,8 @@ enum CjhCommandMode
 {
     CjhCommandMode_Normal,
     CjhCommandMode_Insert,
-    CjhCommandMode_VisualLine
+    CjhCommandMode_VisualLine,
+    CjhCommandMode_Visual
 };
 
 enum CjhDir
@@ -58,6 +57,7 @@ struct CjhMultiKeyCmdHooks
     CjhMultiKeyCmdHook *cjh_snippet_hook;
     CjhMultiKeyCmdHook *cjh_toggle_hook;
     CjhMultiKeyCmdHook *cjh_visual_line_mode_hook;
+    CjhMultiKeyCmdHook *cjh_visual_mode_hook;
     CjhMultiKeyCmdHook *cjh_window_hook;
     CjhMultiKeyCmdHook *cjh_y_hook;
 };
@@ -73,6 +73,7 @@ static CjhMultiKeyCmdHooks cjh_multi_key_cmd_hooks;
 static Range_i64 cjh_visual_line_mode_range;
 
 static bool cjh_in_visual_line_mode();
+static bool cjh_in_visual_mode();
 
 #include "4coder_default_include.cpp"
 
@@ -96,7 +97,6 @@ static void cjh_begin_visual_line_mode_range(Application_Links *app)
     cjh_visual_line_mode_range.end = view_get_cursor_pos(app, view);
     cjh_prev_visual_line_number = get_line_number_from_pos(app, buffer, saved_cursor);
     view_set_cursor(app, view, seek_pos(saved_cursor));
-
 }
 
 static void cjh_update_visual_line_mode_range(Application_Links *app)
@@ -139,6 +139,13 @@ static void cjh_update_visual_line_mode_range(Application_Links *app)
 }
 
 // Multi key command hooks
+static void cjh_visual_mode_hook(Application_Links *app)
+{
+    cjh_toggle_highlight_range();
+    set_mark(app);
+    cjh_command_mode = CjhCommandMode_Visual;
+}
+
 static void cjh_visual_line_mode_hook(Application_Links *app)
 {
     cjh_toggle_highlight_range();
@@ -171,6 +178,7 @@ CJH_START_MULTI_KEY_CMD(snippet)
 CJH_START_MULTI_KEY_CMD(space)
 CJH_START_MULTI_KEY_CMD(toggle)
 CJH_START_MULTI_KEY_CMD(visual_line_mode)
+CJH_START_MULTI_KEY_CMD(visual_mode)
 CJH_START_MULTI_KEY_CMD(window)
 CJH_START_MULTI_KEY_CMD(y)
 
@@ -267,6 +275,11 @@ static void cjh_side_by_side_panels(Application_Links *app)
 static bool cjh_in_normal_mode()
 {
     return cjh_command_mode == CjhCommandMode_Normal;
+}
+
+static bool cjh_in_visual_mode()
+{
+    return cjh_command_mode == CjhCommandMode_Visual;
 }
 
 static bool cjh_in_visual_line_mode()
@@ -462,6 +475,15 @@ static void cjh_draw_cursor_mark_highlight(Application_Links *app, View_ID view_
                 Range_i64 range = cjh_visual_line_mode_range;
                 draw_character_block(app, text_layout_id, cjh_visual_line_mode_range, 1.0f,
                                      fcolor_id(defcolor_highlight));
+                cjh_draw_underbar_cursor(app, text_layout_id, cursor_pos, f_white);
+            } break;
+
+            case CjhCommandMode_Visual:
+            {
+                Range_i64 range = {};
+                range.start = min(cursor_pos, mark_pos);
+                range.end = max(cursor_pos, mark_pos) + 1;
+                draw_character_block(app, text_layout_id, range, 1.0f, fcolor_id(defcolor_highlight));
                 cjh_draw_underbar_cursor(app, text_layout_id, cursor_pos, f_white);
             } break;
         }
@@ -919,7 +941,6 @@ static void cjh_setup_g_mapping(Mapping *mapping, i64 g_cmd_map_id)
 
 // Help commands
 CJH_COMMAND_AND_ENTER_NORMAL_MODE(command_documentation)
-CJH_COMMAND_AND_ENTER_NORMAL_MODE(command_lister)
 CJH_COMMAND_AND_ENTER_NORMAL_MODE(custom_api_documentation)
 
 static void cjh_setup_help_mapping(Mapping *mapping, i64 help_cmd_map_id)
@@ -928,7 +949,6 @@ static void cjh_setup_help_mapping(Mapping *mapping, i64 help_cmd_map_id)
 
     Bind(cjh_custom_api_documentation, KeyCode_A);
     Bind(cjh_command_documentation, KeyCode_C);
-    Bind(cjh_command_lister, KeyCode_C);
 }
 
 // Y commands
@@ -1011,14 +1031,6 @@ CUSTOM_COMMAND_SIG(cjh_insert_newline_below)
         cjh_update_visual_line_mode_range(app);           \
     }
 
-#define CJH_VISUAL_LINE_MODE_EDIT_COMMAND(cmd)   \
-    CUSTOM_COMMAND_SIG(cmd##_visual_line_mode)   \
-    {                                            \
-        cmd(app);                                \
-        cjh_update_visual_line_mode_range(app);  \
-        cjh_enter_normal_mode(app);              \
-    }
-
 // Visual Line Mode Commands
 CJH_VISUAL_LINE_MODE_MOTION_COMMAND(move_left)
 CJH_VISUAL_LINE_MODE_MOTION_COMMAND(move_right)
@@ -1056,8 +1068,6 @@ static void cjh_setup_visual_line_mode_mapping(Mapping *mapping, i64 visual_line
 {
     CJH_CMD_MAPPING_PREAMBLE(visual_line_mode_cmd_map_id);
 
-    ParentMap(cjh_mapid_normal_mode);
-
     // Motions
     Bind(move_left_visual_line_mode, KeyCode_H);
     Bind(move_right_visual_line_mode, KeyCode_L);
@@ -1078,7 +1088,49 @@ static void cjh_setup_visual_line_mode_mapping(Mapping *mapping, i64 visual_line
     Bind(cjh_visual_line_mode_yank, KeyCode_Y);
 }
 
+// Visual Mode Commands
+
+CUSTOM_COMMAND_SIG(cjh_delete_range)
+{
+    View_ID view = get_active_view(app, Access_ReadWrite);
+    Buffer_ID buffer = view_get_buffer(app, view, Access_ReadWrite);
+    Range_i64 range = get_view_range(app, view);
+    // NOTE(cjh): End should be inclusive
+    range.end++;
+    buffer_replace_range(app, buffer, range, string_u8_empty);
+    cjh_enter_normal_mode(app);
+}
+
+CUSTOM_COMMAND_SIG(cjh_copy)
+{
+    View_ID view = get_active_view(app, Access_ReadWrite);
+    Buffer_ID buffer = view_get_buffer(app, view, Access_ReadWrite);
+    Range_i64 range = get_view_range(app, view);
+    // NOTE(cjh): End should be inclusive
+    range.end++;
+    clipboard_post_buffer_range(app, 0, buffer, range);
+    cjh_enter_normal_mode(app);
+}
+
+CUSTOM_COMMAND_SIG(cjh_visual_mode_change)
+{
+    cjh_delete_range(app);
+    cjh_enter_insert_mode(app);
+}
+
+static void cjh_setup_visual_mode_mapping(Mapping *mapping, i64 visual_mode_cmd_map_id)
+{
+    CJH_CMD_MAPPING_PREAMBLE(visual_mode_cmd_map_id);
+    ParentMap(cjh_mapid_normal_mode);
+
+    Bind(cjh_visual_mode_change, KeyCode_C);
+    Bind(cjh_delete_range, KeyCode_D);
+    Bind(cjh_copy, KeyCode_Y);
+}
+
 // Space Commands
+CJH_COMMAND_AND_ENTER_NORMAL_MODE(command_lister)
+
 static void cjh_setup_space_mapping(Mapping *mapping, i64 space_cmd_map_id)
 {
     CJH_CMD_MAPPING_PREAMBLE(space_cmd_map_id);
@@ -1113,6 +1165,7 @@ static void cjh_setup_space_mapping(Mapping *mapping, i64 space_cmd_map_id)
     // " x"
     // " y"
     // " z"
+    Bind(cjh_command_lister, KeyCode_Space);
     // Bind(cjh_interactive_search_in_project, KeyCode_ForwardSlash);
     // Bind(cjh_toggle_previous_buffer, KeyCode_Tab);
     Bind(cjh_insert_newline_above, KeyCode_LeftBracket);
@@ -1256,7 +1309,7 @@ static void cjh_setup_normal_mode_mapping(Mapping *mapping, i64 normal_mode_id)
     // Bind(kmacro_start_macro_or_insert_counter, KeyCode_S);
     Bind(cjh_find_forward_til, KeyCode_T);
     Bind(undo, KeyCode_U);
-    // Bind(cjh_start_multi_key_cmd_visual_mode, KeyCode_V);
+    Bind(cjh_start_multi_key_cmd_visual_mode, KeyCode_V);
     Bind(cjh_move_right_word, KeyCode_W);
     Bind(delete_char, KeyCode_X);
     Bind(cjh_start_multi_key_cmd_y, KeyCode_Y);
@@ -1518,6 +1571,7 @@ custom_layer_init(Application_Links *app){
 
     // NOTE(cjh): Multi key command hooks
     cjh_multi_key_cmd_hooks.cjh_visual_line_mode_hook = cjh_visual_line_mode_hook;
+    cjh_multi_key_cmd_hooks.cjh_visual_mode_hook = cjh_visual_mode_hook;
 
     mapping_init(tctx, &framework_mapping);
     cjh_setup_insert_mode_mapping(&framework_mapping, mapid_global, mapid_file, mapid_code);
@@ -1535,6 +1589,7 @@ custom_layer_init(Application_Links *app){
     cjh_setup_snippet_mapping(&framework_mapping, cjh_mapid_snippet);
     cjh_setup_space_mapping(&framework_mapping, cjh_mapid_space);
     cjh_setup_toggle_mapping(&framework_mapping, cjh_mapid_toggle);
+    cjh_setup_visual_mode_mapping(&framework_mapping, cjh_mapid_visual_mode);
     cjh_setup_visual_line_mode_mapping(&framework_mapping, cjh_mapid_visual_line_mode);
     cjh_setup_window_mapping(&framework_mapping, cjh_mapid_window);
     cjh_setup_y_mapping(&framework_mapping, cjh_mapid_y);
