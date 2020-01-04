@@ -5,16 +5,15 @@
 // TODO(chogan): Missing functionality
 // - " /" for project wide search
 // - '/' for file search
-// - Keep minibuffer open for displaying messages?
-// - Syntax highlighting for type names
-// - Jump to panel by number (" w1", " w3", etc.)
 // - Layouts
+// - Jump to panel by number (" w1", " w3", etc.)
+// - Syntax highlighting for type names
+// - Keep minibuffer open for displaying messages?
 // - cjh_fill_paragraph
 
 // TODO(chogan): Bugs
 // - 'e' doesn't work in comments
 // - Scratch buffer has same ID as status panel?
-// - Commands like df<char> and ct<char> stop 1 char early
 // - Can't run normal mode commands in *messages* buffer. e.g., "SPC f f"
 
 #if !defined(FCODER_CHOGAN_BINDINGS_CPP)
@@ -385,6 +384,20 @@ CUSTOM_COMMAND_SIG(cjh_insert_mode_d)
             write_text(app, SCu8("d"));
         }
     }
+}
+
+CUSTOM_COMMAND_SIG(cjh_cut)
+{
+    View_ID view = get_active_view(app, Access_ReadWrite);
+    Buffer_ID buffer = view_get_buffer(app, view, Access_ReadWrite);
+    Range_i64 range = get_view_range(app, view);
+    // NOTE(cjh): End should be inclusive
+    range.end++;
+    if (clipboard_post_buffer_range(app, 0, buffer, range))
+    {
+        buffer_replace_range(app, buffer, range, string_u8_empty);
+    }
+    cjh_enter_normal_mode(app);
 }
 
 static i64 cjh_buffer_seek_right_word(Application_Links *app, Buffer_ID buffer, i64 start) {
@@ -954,7 +967,7 @@ CJH_COMMAND_AND_ENTER_NORMAL_MODE(delete_line)
     {                                           \
         set_mark(app);                          \
         motion(app);                            \
-        cut(app);                               \
+        cjh_cut(app);                           \
         cjh_enter_normal_mode(app);             \
     }
 
@@ -1157,17 +1170,6 @@ static void cjh_setup_visual_line_mode_mapping(Mapping *mapping, i64 visual_line
 
 // Visual Mode Commands
 
-CUSTOM_COMMAND_SIG(cjh_delete_range)
-{
-    View_ID view = get_active_view(app, Access_ReadWrite);
-    Buffer_ID buffer = view_get_buffer(app, view, Access_ReadWrite);
-    Range_i64 range = get_view_range(app, view);
-    // NOTE(cjh): End should be inclusive
-    range.end++;
-    buffer_replace_range(app, buffer, range, string_u8_empty);
-    cjh_enter_normal_mode(app);
-}
-
 CUSTOM_COMMAND_SIG(cjh_copy)
 {
     View_ID view = get_active_view(app, Access_ReadWrite);
@@ -1181,7 +1183,7 @@ CUSTOM_COMMAND_SIG(cjh_copy)
 
 CUSTOM_COMMAND_SIG(cjh_visual_mode_change)
 {
-    cjh_delete_range(app);
+    cjh_cut(app);
     cjh_enter_insert_mode(app);
 }
 
@@ -1191,7 +1193,7 @@ static void cjh_setup_visual_mode_mapping(Mapping *mapping, i64 visual_mode_cmd_
     ParentMap(cjh_mapid_normal_mode);
 
     Bind(cjh_visual_mode_change, KeyCode_C);
-    Bind(cjh_delete_range, KeyCode_D);
+    Bind(cjh_cut, KeyCode_D);
     Bind(cjh_copy, KeyCode_Y);
 }
 
