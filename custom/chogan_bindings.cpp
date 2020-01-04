@@ -4,8 +4,6 @@
 
 // TODO(chogan): Missing functionality
 // - Visual mode
-//   - Change range to whole lines
-//   - Change cursor to under bar
 //   - Modify commands to act on range
 // - '.' for repeat last command
 //   - Save latest range in keyboard_log_buffer
@@ -37,29 +35,30 @@ enum CjhCommandMode
     CjhCommandMode_VisualLine
 };
 
-enum CjhFindDir
+enum CjhDir
 {
-    CjhFindDir_Forward,
-    CjhFindDir_Backward
+    CjhDir_Forward,
+    CjhDir_Backward,
 };
 
 typedef void CjhMultiKeyCmdHook(Application_Links *app);
 
 struct CjhMultiKeyCmdHooks
 {
-    CjhMultiKeyCmdHook *cjh_visual_line_mode_hook;
-    CjhMultiKeyCmdHook *cjh_space_hook;
     CjhMultiKeyCmdHook *cjh_buffer_hook;
-    CjhMultiKeyCmdHook *cjh_file_hook;
-    CjhMultiKeyCmdHook *cjh_window_hook;
-    CjhMultiKeyCmdHook *cjh_toggle_hook;
-    CjhMultiKeyCmdHook *cjh_comma_hook;
-    CjhMultiKeyCmdHook *cjh_macro_hook;
-    CjhMultiKeyCmdHook *cjh_snippet_hook;
-    CjhMultiKeyCmdHook *cjh_quit_hook;
     CjhMultiKeyCmdHook *cjh_c_hook;
+    CjhMultiKeyCmdHook *cjh_comma_hook;
     CjhMultiKeyCmdHook *cjh_d_hook;
+    CjhMultiKeyCmdHook *cjh_file_hook;
     CjhMultiKeyCmdHook *cjh_g_hook;
+    CjhMultiKeyCmdHook *cjh_help_hook;
+    CjhMultiKeyCmdHook *cjh_macro_hook;
+    CjhMultiKeyCmdHook *cjh_quit_hook;
+    CjhMultiKeyCmdHook *cjh_space_hook;
+    CjhMultiKeyCmdHook *cjh_snippet_hook;
+    CjhMultiKeyCmdHook *cjh_toggle_hook;
+    CjhMultiKeyCmdHook *cjh_visual_line_mode_hook;
+    CjhMultiKeyCmdHook *cjh_window_hook;
     CjhMultiKeyCmdHook *cjh_y_hook;
 };
 
@@ -67,8 +66,9 @@ static u8 cjh_last_f_search;
 static bool cjh_last_find_was_til;
 static u64 cjh_last_time_f_press;
 static u64 cjh_fd_escape_delay_us = 333 * 1000;
+static i64 cjh_prev_visual_line_number;
 static CjhCommandMode cjh_command_mode;
-static CjhFindDir cjh_last_find_dir;
+static CjhDir cjh_last_find_dir;
 static CjhMultiKeyCmdHooks cjh_multi_key_cmd_hooks;
 static Range_i64 cjh_visual_line_mode_range;
 
@@ -88,21 +88,51 @@ static void cjh_toggle_highlight_range()
 static void cjh_begin_visual_line_mode_range(Application_Links *app)
 {
     View_ID view = get_active_view(app, Access_ReadWrite);
+    Buffer_ID buffer = view_get_buffer(app, view, Access_ReadWrite);
     i64 saved_cursor = view_get_cursor_pos(app, view);
     seek_beginning_of_line(app);
     cjh_visual_line_mode_range.start = view_get_cursor_pos(app, view);
     seek_end_of_line(app);
     cjh_visual_line_mode_range.end = view_get_cursor_pos(app, view);
+    cjh_prev_visual_line_number = get_line_number_from_pos(app, buffer, saved_cursor);
     view_set_cursor(app, view, seek_pos(saved_cursor));
+
 }
 
 static void cjh_update_visual_line_mode_range(Application_Links *app)
 {
     View_ID view = get_active_view(app, Access_ReadWrite);
+    Buffer_ID buffer = view_get_buffer(app, view, Access_ReadWrite);
     i64 saved_cursor = view_get_cursor_pos(app, view);
-    // TODO(cjh): check for start < end
+    seek_beginning_of_line(app);
+    i64 start = view_get_cursor_pos(app, view);
     seek_end_of_line(app);
-    cjh_visual_line_mode_range.end = view_get_cursor_pos(app, view);
+    i64 end = view_get_cursor_pos(app, view);
+    i64 line_number = get_line_number_from_pos(app, buffer, saved_cursor);
+
+    if (line_number < cjh_prev_visual_line_number)
+    {
+        if (start < cjh_visual_line_mode_range.end)
+        {
+            cjh_visual_line_mode_range.start = start;
+        }
+        else
+        {
+            cjh_visual_line_mode_range.end = end;
+        }
+    }
+    else
+    {
+        if (end > cjh_visual_line_mode_range.start)
+        {
+            cjh_visual_line_mode_range.end = end;
+        }
+        else
+        {
+            cjh_visual_line_mode_range.start = start;
+        }
+    }
+
     view_set_cursor(app, view, seek_pos(saved_cursor));
 }
 
@@ -126,19 +156,20 @@ static void cjh_visual_line_mode_hook(Application_Links *app)
     }
 
 // Multi key modes
-CJH_START_MULTI_KEY_CMD(visual_line_mode)
-CJH_START_MULTI_KEY_CMD(space)
 CJH_START_MULTI_KEY_CMD(buffer)
-CJH_START_MULTI_KEY_CMD(file)
-CJH_START_MULTI_KEY_CMD(window)
-CJH_START_MULTI_KEY_CMD(toggle)
-CJH_START_MULTI_KEY_CMD(comma)
-CJH_START_MULTI_KEY_CMD(macro)
-CJH_START_MULTI_KEY_CMD(snippet)
-CJH_START_MULTI_KEY_CMD(quit)
 CJH_START_MULTI_KEY_CMD(c)
+CJH_START_MULTI_KEY_CMD(comma)
 CJH_START_MULTI_KEY_CMD(d)
+CJH_START_MULTI_KEY_CMD(file)
 CJH_START_MULTI_KEY_CMD(g)
+CJH_START_MULTI_KEY_CMD(help)
+CJH_START_MULTI_KEY_CMD(macro)
+CJH_START_MULTI_KEY_CMD(quit)
+CJH_START_MULTI_KEY_CMD(snippet)
+CJH_START_MULTI_KEY_CMD(space)
+CJH_START_MULTI_KEY_CMD(toggle)
+CJH_START_MULTI_KEY_CMD(visual_line_mode)
+CJH_START_MULTI_KEY_CMD(window)
 CJH_START_MULTI_KEY_CMD(y)
 
 // Helpers
@@ -474,7 +505,7 @@ static void cjh_write_key_to_status_panel(Application_Links *app)
     view_set_active(app, saved_view);
 }
 
-static void cjh_find_cmd(Application_Links *app, u8 target, CjhFindDir dir, bool til)
+static void cjh_find_cmd(Application_Links *app, u8 target, CjhDir dir, bool til)
 {
     View_ID view = get_active_view(app, Access_ReadWrite);
     Buffer_ID buffer = view_get_buffer(app, view, Access_ReadWrite);
@@ -489,7 +520,7 @@ static void cjh_find_cmd(Application_Links *app, u8 target, CjhFindDir dir, bool
     u8 at;
     switch (dir)
     {
-        case CjhFindDir_Forward:
+        case CjhDir_Forward:
         {
             cursor_pos++;
             do
@@ -517,7 +548,7 @@ static void cjh_find_cmd(Application_Links *app, u8 target, CjhFindDir dir, bool
             } while (at != '\n' && cursor_pos < end);
         } break;
 
-        case CjhFindDir_Backward:
+        case CjhDir_Backward:
         {
             cursor_pos--;
             do
@@ -551,42 +582,42 @@ CUSTOM_COMMAND_SIG(cjh_find_forward)
 {
     char target = cjh_get_char_from_user(app);
     cjh_last_f_search = target;
-    cjh_last_find_dir = CjhFindDir_Forward;
+    cjh_last_find_dir = CjhDir_Forward;
     cjh_last_find_was_til = false;
-    cjh_find_cmd(app, target, CjhFindDir_Forward, false);
+    cjh_find_cmd(app, target, CjhDir_Forward, false);
 }
 
 CUSTOM_COMMAND_SIG(cjh_find_backward)
 {
     char target = cjh_get_char_from_user(app);
     cjh_last_f_search = target;
-    cjh_last_find_dir = CjhFindDir_Backward;
+    cjh_last_find_dir = CjhDir_Backward;
     cjh_last_find_was_til = false;
-    cjh_find_cmd(app, target, CjhFindDir_Backward, false);
+    cjh_find_cmd(app, target, CjhDir_Backward, false);
 }
 
 CUSTOM_COMMAND_SIG(cjh_find_forward_til)
 {
     char target = cjh_get_char_from_user(app);
     cjh_last_f_search = target;
-    cjh_last_find_dir = CjhFindDir_Forward;
+    cjh_last_find_dir = CjhDir_Forward;
     cjh_last_find_was_til = true;
-    cjh_find_cmd(app, target, CjhFindDir_Forward, true);
+    cjh_find_cmd(app, target, CjhDir_Forward, true);
 }
 
 CUSTOM_COMMAND_SIG(cjh_find_backward_til)
 {
     char target = cjh_get_char_from_user(app);
     cjh_last_f_search = target;
-    cjh_last_find_dir = CjhFindDir_Backward;
+    cjh_last_find_dir = CjhDir_Backward;
     cjh_last_find_was_til = true;
-    cjh_find_cmd(app, target, CjhFindDir_Backward, true);
+    cjh_find_cmd(app, target, CjhDir_Backward, true);
 }
 
 CUSTOM_COMMAND_SIG(cjh_repeat_last_find_cmd)
 {
     char target = cjh_last_f_search;
-    CjhFindDir dir = cjh_last_find_dir;
+    CjhDir dir = cjh_last_find_dir;
     bool til = cjh_last_find_was_til;
     cjh_find_cmd(app, target, dir, til);
 }
@@ -884,6 +915,20 @@ static void cjh_setup_g_mapping(Mapping *mapping, i64 g_cmd_map_id)
     // Bind(cjh_goto_prev_function, KeyCode_P);
 }
 
+// Help commands
+CJH_COMMAND_AND_ENTER_NORMAL_MODE(command_documentation)
+CJH_COMMAND_AND_ENTER_NORMAL_MODE(command_lister)
+CJH_COMMAND_AND_ENTER_NORMAL_MODE(custom_api_documentation)
+
+static void cjh_setup_help_mapping(Mapping *mapping, i64 help_cmd_map_id)
+{
+    CJH_CMD_MAPPING_PREAMBLE(help_cmd_map_id);
+
+    Bind(cjh_custom_api_documentation, KeyCode_A);
+    Bind(cjh_command_documentation, KeyCode_C);
+    Bind(cjh_command_lister, KeyCode_C);
+}
+
 // Y commands
 
 CUSTOM_COMMAND_SIG(cjh_yank_whole_line)
@@ -1001,6 +1046,7 @@ static void cjh_setup_space_mapping(Mapping *mapping, i64 space_cmd_map_id)
     // Bind(); // " d" 'dired)
     // Bind(); // " en" 'compilation-next-error-function)
     Bind(cjh_start_multi_key_cmd_file, KeyCode_F);
+    Bind(cjh_start_multi_key_cmd_help, KeyCode_H);
     // " i"
     // Bind(); // " jw" 'ace-jump-word-mode)
     // Bind(); // " jc" 'ace-jump-char-mode)
@@ -1432,20 +1478,22 @@ custom_layer_init(Application_Links *app){
 
     mapping_init(tctx, &framework_mapping);
     cjh_setup_insert_mode_mapping(&framework_mapping, mapid_global, mapid_file, mapid_code);
-    cjh_setup_normal_mode_mapping(&framework_mapping, cjh_mapid_normal_mode);
-    cjh_setup_visual_line_mode_mapping(&framework_mapping, cjh_mapid_visual_line_mode);
-    cjh_setup_space_mapping(&framework_mapping, cjh_mapid_space);
+
     cjh_setup_buffer_mapping(&framework_mapping, cjh_mapid_buffer);
-    cjh_setup_file_mapping(&framework_mapping, cjh_mapid_file);
-    cjh_setup_window_mapping(&framework_mapping, cjh_mapid_window);
-    cjh_setup_toggle_mapping(&framework_mapping, cjh_mapid_toggle);
-    cjh_setup_comma_mapping(&framework_mapping, cjh_mapid_comma);
-    cjh_setup_snippet_mapping(&framework_mapping, cjh_mapid_snippet);
-    cjh_setup_macro_mapping(&framework_mapping, cjh_mapid_macro);
-    cjh_setup_quit_mapping(&framework_mapping, cjh_mapid_quit);
     cjh_setup_c_mapping(&framework_mapping, cjh_mapid_c);
+    cjh_setup_comma_mapping(&framework_mapping, cjh_mapid_comma);
     cjh_setup_d_mapping(&framework_mapping, cjh_mapid_d);
+    cjh_setup_file_mapping(&framework_mapping, cjh_mapid_file);
     cjh_setup_g_mapping(&framework_mapping, cjh_mapid_g);
+    cjh_setup_help_mapping(&framework_mapping, cjh_mapid_help);
+    cjh_setup_macro_mapping(&framework_mapping, cjh_mapid_macro);
+    cjh_setup_normal_mode_mapping(&framework_mapping, cjh_mapid_normal_mode);
+    cjh_setup_quit_mapping(&framework_mapping, cjh_mapid_quit);
+    cjh_setup_snippet_mapping(&framework_mapping, cjh_mapid_snippet);
+    cjh_setup_space_mapping(&framework_mapping, cjh_mapid_space);
+    cjh_setup_toggle_mapping(&framework_mapping, cjh_mapid_toggle);
+    cjh_setup_visual_line_mode_mapping(&framework_mapping, cjh_mapid_visual_line_mode);
+    cjh_setup_window_mapping(&framework_mapping, cjh_mapid_window);
     cjh_setup_y_mapping(&framework_mapping, cjh_mapid_y);
 }
 
