@@ -136,8 +136,15 @@ CUSTOM_DOC("Input consumption loop for default view behavior")
 
             ProfileCloseNow(view_input_profile);
 
+            if (input.event.virtual_event)
+            {
+                cjh_replaying_command = true;
+            }
+
             // NOTE(allen): call the command
             binding.custom(app);
+
+            cjh_replaying_command = false;
 
             // NOTE(allen): after the command is called do some book keeping
             ProfileScope(app, "after view input");

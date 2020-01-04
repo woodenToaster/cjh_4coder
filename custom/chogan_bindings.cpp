@@ -3,20 +3,19 @@
 // TOP
 
 // TODO(chogan): Missing functionality
-// - '.' for repeat last command
-//   - Save latest range in keyboard_log_buffer
 // - " /" for project wide search
 // - '/' for file search
 // - Keep minibuffer open for displaying messages?
 // - Syntax highlighting for type names
 // - Jump to panel by number (" w1", " w3", etc.)
 // - Layouts
+// - cjh_fill_paragraph
 
 // TODO(chogan): Bugs
-// 'e' doesn't work in comments
-// Scratch buffer has same ID as status panel?
-// Commands like df<char> and ct<char> stop 1 char early
-// Keyboard macros only replay once
+// - 'e' doesn't work in comments
+// - Scratch buffer has same ID as status panel?
+// - Commands like df<char> and ct<char> stop 1 char early
+// - Can't run normal mode commands in *messages* buffer. e.g., "SPC f f"
 
 #if !defined(FCODER_CHOGAN_BINDINGS_CPP)
 #define FCODER_CHOGAN_BINDINGS_CPP
@@ -64,13 +63,19 @@ struct CjhMultiKeyCmdHooks
 
 static u8 cjh_last_f_search;
 static bool cjh_last_find_was_til;
+static bool cjh_recording_command;
+static bool cjh_replaying_command;
 static u64 cjh_last_time_f_press;
 static u64 cjh_fd_escape_delay_us = 333 * 1000;
 static i64 cjh_prev_visual_line_number;
+// NOTE(cjh): The number of events to subtract from a recorded macro. This is 2
+// times the number of key strokes to stop a macro minus 1.
+static i64 cjh_stop_recording_macro_event_count;
 static CjhCommandMode cjh_command_mode;
 static CjhDir cjh_last_find_dir;
 static CjhMultiKeyCmdHooks cjh_multi_key_cmd_hooks;
 static Range_i64 cjh_visual_line_mode_range;
+static Range_i64 cjh_last_command_range;
 
 static bool cjh_in_visual_line_mode();
 static bool cjh_in_visual_mode();
@@ -139,6 +144,21 @@ static void cjh_update_visual_line_mode_range(Application_Links *app)
 }
 
 // Multi key command hooks
+
+static void cjh_start_recording_command(Application_Links *app)
+{
+    if (!cjh_replaying_command)
+    {
+        Buffer_ID buffer = get_keyboard_log_buffer(app);
+        i64 start = buffer_get_size(app, buffer);
+        Buffer_Cursor cursor = buffer_compute_cursor(app, buffer, seek_pos(start));
+        // NOTE(cjh): Get previous line to capture the event that triggered this function
+        Buffer_Cursor prev_line = buffer_compute_cursor(app, buffer, seek_line_col(cursor.line - 1, 1));
+        cjh_last_command_range.start = prev_line.pos;
+        cjh_recording_command = true;
+    }
+}
+
 static void cjh_visual_mode_hook(Application_Links *app)
 {
     cjh_toggle_highlight_range();
@@ -268,7 +288,8 @@ static void cjh_side_by_side_panels(Application_Links *app)
 {
     String_Const_u8_Array file_names = {};
     Buffer_Identifier left = buffer_identifier(string_u8_litexpr("chogan_bindings.cpp"));
-    Buffer_Identifier right = buffer_identifier(string_u8_litexpr("*scratch*"));
+    // Buffer_Identifier right = buffer_identifier(string_u8_litexpr("*scratch*"));
+    Buffer_Identifier right = buffer_identifier(string_u8_litexpr("*messages*"));
     default_4coder_side_by_side_panels(app, left, right, file_names);
 }
 
@@ -301,6 +322,14 @@ CUSTOM_COMMAND_SIG(cjh_enter_normal_mode)
         cjh_toggle_status_panel(app);
     }
 
+    if (cjh_recording_command)
+    {
+        Buffer_ID buffer = get_keyboard_log_buffer(app);
+        i64 end = buffer_get_size(app, buffer);
+        cjh_last_command_range.end = end;
+        cjh_recording_command = false;
+    }
+
     global_config.highlight_range = 0;
 }
 
@@ -308,6 +337,17 @@ CUSTOM_COMMAND_SIG(cjh_enter_insert_mode)
 {
     cjh_command_mode = CjhCommandMode_Insert;
     cjh_set_command_map(app, mapid_code);
+
+    if (!cjh_recording_command && !cjh_replaying_command)
+    {
+        Buffer_ID buffer = get_keyboard_log_buffer(app);
+        i64 start = buffer_get_size(app, buffer);
+        Buffer_Cursor cursor = buffer_compute_cursor(app, buffer, seek_pos(start));
+        // NOTE(cjh): Get previous line to capture the event to enter insert mode
+        Buffer_Cursor prev_line = buffer_compute_cursor(app, buffer, seek_line_col(cursor.line - 1, 1));
+        cjh_last_command_range.start = prev_line.pos;
+        cjh_recording_command = true;
+    }
 }
 
 CUSTOM_COMMAND_SIG(cjh_insert_mode_f)
@@ -832,12 +872,39 @@ static void cjh_setup_snippet_mapping(Mapping *mapping, i64 snippet_cmd_map_id)
 
 // Macro commands
 CJH_COMMAND_AND_ENTER_NORMAL_MODE(keyboard_macro_start_recording)
-CJH_COMMAND_AND_ENTER_NORMAL_MODE(keyboard_macro_finish_recording)
 
+CUSTOM_COMMAND_SIG(cjh_keyboard_macro_finish_recording)
+{
+    if (!global_keyboard_macro_is_recording ||
+        get_current_input_is_virtual(app)){
+        return;
+    }
+
+    Buffer_ID buffer = get_keyboard_log_buffer(app);
+    global_keyboard_macro_is_recording = false;
+    i64 end = buffer_get_size(app, buffer);
+    Buffer_Cursor cursor = buffer_compute_cursor(app, buffer, seek_pos(end));
+    // NOTE(cjh): We subtract lines to get rid of the commands that stop macro
+    // recording. The extra -1 is a final press for the last command
+    Buffer_Cursor back_cursor = buffer_compute_cursor(
+        app, buffer, seek_line_col(cursor.line - cjh_stop_recording_macro_event_count - 1, 1)
+    );
+    global_keyboard_macro_range.one_past_last = back_cursor.pos;
+    cjh_enter_normal_mode(app);
+
+#if 0
+    Scratch_Block scratch(app);
+    String_Const_u8 macro = push_buffer_range(app, scratch, buffer, global_keyboard_macro_range);
+    print_message(app, string_u8_litexpr("recorded:\n"));
+    print_message(app, macro);
+#endif
+}
 static void cjh_setup_macro_mapping(Mapping *mapping, i64 macro_cmd_map_id)
 {
     CJH_CMD_MAPPING_PREAMBLE(macro_cmd_map_id);
 
+
+    cjh_stop_recording_macro_event_count = 4;
     Bind(cjh_keyboard_macro_start_recording, KeyCode_R);
     Bind(cjh_keyboard_macro_finish_recording, KeyCode_S);
     // Bind(cjh_display_recorded_macro, KeyCode_D);
@@ -1274,6 +1341,20 @@ CUSTOM_COMMAND_SIG(cjh_toggle_upper_lower)
     }
 }
 
+CUSTOM_COMMAND_SIG(cjh_repeat_last_command)
+{
+    Buffer_ID buffer = get_keyboard_log_buffer(app);
+    Scratch_Block scratch(app, Scratch_Share);
+    String_Const_u8 macro = push_buffer_range(app, scratch, buffer, cjh_last_command_range);
+    keyboard_macro_play(app, macro);
+    cjh_enter_normal_mode(app);
+
+#if 0
+    print_message(app, string_u8_litexpr("replayed:\n"));
+    print_message(app, macro);
+#endif
+}
+
 CJH_COMMAND_AND_ENTER_NORMAL_MODE(keyboard_macro_replay)
 
 static void cjh_setup_normal_mode_mapping(Mapping *mapping, i64 normal_mode_id)
@@ -1317,7 +1398,8 @@ static void cjh_setup_normal_mode_mapping(Mapping *mapping, i64 normal_mode_id)
 
     Bind(cjh_start_multi_key_cmd_space, KeyCode_Space);
     Bind(cjh_start_multi_key_cmd_comma, KeyCode_Comma);
-    // Bind(cjh_indent_for_tab_command, KeyCode_Tab);
+    Bind(word_complete, KeyCode_Tab);
+    // Indent (formatted)
 
     // A-Z
     Bind(cjh_eol_insert, KeyCode_A, KeyCode_Shift);
@@ -1382,7 +1464,7 @@ static void cjh_setup_normal_mode_mapping(Mapping *mapping, i64 normal_mode_id)
     Bind(search, KeyCode_ForwardSlash);
     Bind(cjh_repeat_last_find_cmd, KeyCode_Semicolon);
     // Bind(cjh_goto_mark, KeyCode_Quote);
-    // Bind(cjh_repeat_last_modification, KeyCode_Period);
+    Bind(cjh_repeat_last_command, KeyCode_Period);
 
     // Control-<a-z>
     // TODO(cjh): Put the cursor in the middle of the screen?
@@ -1572,6 +1654,8 @@ custom_layer_init(Application_Links *app){
     // NOTE(cjh): Multi key command hooks
     cjh_multi_key_cmd_hooks.cjh_visual_line_mode_hook = cjh_visual_line_mode_hook;
     cjh_multi_key_cmd_hooks.cjh_visual_mode_hook = cjh_visual_mode_hook;
+    cjh_multi_key_cmd_hooks.cjh_c_hook = cjh_start_recording_command;
+    cjh_multi_key_cmd_hooks.cjh_d_hook = cjh_start_recording_command;
 
     mapping_init(tctx, &framework_mapping);
     cjh_setup_insert_mode_mapping(&framework_mapping, mapid_global, mapid_file, mapid_code);
