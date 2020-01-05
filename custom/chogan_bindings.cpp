@@ -9,14 +9,17 @@
 // - [[
 // - ]]
 // - Layouts
-// - Vim style file search
+// - Vim style search in buffer
 // - Jump to panel by number (" w1", " w3", etc.)
 // - Syntax highlighting for type names
 // - Keep minibuffer open for displaying messages?
 // - cjh_fill_paragraph
+// - Use draw_line_highlight for visual line mode
+// - Cut cursor in half during multi key command
 
 // TODO(chogan): Bugs
 // - 'e' doesn't work in comments
+// - Show whitespace doesn't work
 
 #if !defined(FCODER_CHOGAN_BINDINGS_CPP)
 #define FCODER_CHOGAN_BINDINGS_CPP
@@ -60,6 +63,11 @@ struct CjhMultiKeyCmdHooks
     CjhMultiKeyCmdHook *cjh_visual_mode_hook;
     CjhMultiKeyCmdHook *cjh_window_hook;
     CjhMultiKeyCmdHook *cjh_y_hook;
+};
+
+struct MarkRing
+{
+    
 };
 
 static u8 cjh_last_f_search;
@@ -893,6 +901,7 @@ static void cjh_insert_snippet(Application_Links *app, char *snippet_name)
 CJH_DEFINE_INSERT_SNIPPET_FUNC(if)
 CJH_DEFINE_INSERT_SNIPPET_FUNC(for)
 CJH_DEFINE_INSERT_SNIPPET_FUNC(case)
+CJH_DEFINE_INSERT_SNIPPET_FUNC(struct)
 
 static bool cjh_inserting_begin_if0_comment = true;
 
@@ -915,9 +924,10 @@ static void cjh_setup_snippet_mapping(Mapping *mapping, i64 snippet_cmd_map_id)
     CJH_CMD_MAPPING_PREAMBLE(snippet_cmd_map_id);
 
     Bind(cjh_insert_snippet_case, KeyCode_C);
-    Bind(cjh_insert_snippet_if, KeyCode_I);
     Bind(cjh_insert_snippet_for, KeyCode_F);
-    Bind(cjh_snippet_lister, KeyCode_S);
+    Bind(cjh_insert_snippet_if, KeyCode_I);
+    Bind(cjh_snippet_lister, KeyCode_L);
+    Bind(cjh_insert_snippet_struct, KeyCode_S);
     Bind(cjh_insert_snippet_if0, KeyCode_0);
 }
 
@@ -1237,6 +1247,7 @@ static void cjh_setup_visual_mode_mapping(Mapping *mapping, i64 visual_mode_cmd_
 
 // Space Commands
 CJH_COMMAND_AND_ENTER_NORMAL_MODE(command_lister)
+CJH_COMMAND_AND_ENTER_NORMAL_MODE(list_all_locations)
 
 static void cjh_setup_space_mapping(Mapping *mapping, i64 space_cmd_map_id)
 {
@@ -1270,7 +1281,7 @@ static void cjh_setup_space_mapping(Mapping *mapping, i64 space_cmd_map_id)
     // " y"
     // " z"
     Bind(cjh_command_lister, KeyCode_Space);
-    // Bind(cjh_interactive_search_in_project, KeyCode_ForwardSlash);
+    Bind(cjh_list_all_locations, KeyCode_ForwardSlash);
     // Bind(cjh_toggle_previous_buffer, KeyCode_Tab);
     Bind(cjh_insert_newline_above, KeyCode_LeftBracket);
     Bind(cjh_insert_newline_below, KeyCode_RightBracket);
@@ -1671,7 +1682,7 @@ static void cjh_setup_normal_mode_mapping(Mapping *mapping, i64 normal_mode_id)
     Bind(move_up, KeyCode_K);
     Bind(move_right, KeyCode_L);
     Bind(cursor_mark_swap, KeyCode_M);
-    // Bind(cjh_isearch_next, KeyCode_N);
+    Bind(goto_next_jump, KeyCode_N);
     Bind(cjh_open_newline_below, KeyCode_O);
     Bind(paste, KeyCode_P);
     // Bind(cjh_quit_isearch_highlight, KeyCode_Q);
@@ -1704,7 +1715,7 @@ static void cjh_setup_normal_mode_mapping(Mapping *mapping, i64 normal_mode_id)
     // Bind(kmacro-end-or-call-macro, KeyCode_K, KeyCode_Shift);
     // Bind(AVAILABLE, KeyCode_L, KeyCode_Shift);
     // Bind(move_to_window_line_top_bottom, KeyCode_M, KeyCode_Shift);
-    // Bind(cjh_isearch_prev, KeyCode_N, KeyCode_Shift);
+    Bind(goto_prev_jump, KeyCode_N, KeyCode_Shift);
     Bind(cjh_open_newline_above, KeyCode_O, KeyCode_Shift);
     // Bind(AVAILABLE, KeyCode_P, KeyCode_Shift);
     // Bind(AVAILABLE, KeyCode_Q, KeyCode_Shift);

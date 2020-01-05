@@ -175,6 +175,7 @@ static Snippet default_snippets[] = {
     {"forj",   "for (j = 0; j < ; j += 1){\n\n}\n", 5, 16},
     {"fork",   "for (k = 0; k < ; k += 1){\n\n}\n", 5, 16},
     {"for",    "for (;;){\n\n}\n", 5, 10},
+    {"struct", "struct \n{\n\n};\n", 7, 10},
     {"///",    "////////////////////////////////", 32, 32},
     {"#guard", "#if !defined(Z)\n#define Z\n#endif\n", 0, 26},
     
