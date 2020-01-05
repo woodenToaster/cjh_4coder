@@ -373,7 +373,7 @@ chogan_render_buffer(Application_Links *app, View_ID view_id, Face_ID face_id,
     f32 cursor_roundness = 1.0f;
     f32 mark_thickness = 2.f;
 
-    if (view_id != cjh_status_panel_view_id)
+    if (view_id != cjh_status_footer_panel_view_id)
     {
         cjh_draw_cursor_mark_highlight(app, view_id, is_active_view, buffer, text_layout_id, cursor_roundness,
                                        mark_thickness);

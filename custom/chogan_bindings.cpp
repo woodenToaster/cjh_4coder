@@ -4,8 +4,8 @@
 
 // TODO(chogan): Missing functionality
 // - " /" for project wide search
-// - '/' for file search
 // - Layouts
+// - Vim style file search
 // - Jump to panel by number (" w1", " w3", etc.)
 // - Syntax highlighting for type names
 // - Keep minibuffer open for displaying messages?
@@ -13,8 +13,6 @@
 
 // TODO(chogan): Bugs
 // - 'e' doesn't work in comments
-// - Scratch buffer has same ID as status panel?
-// - Can't run normal mode commands in *messages* buffer. e.g., "SPC f f"
 
 #if !defined(FCODER_CHOGAN_BINDINGS_CPP)
 #define FCODER_CHOGAN_BINDINGS_CPP
@@ -80,6 +78,9 @@ static bool cjh_in_visual_line_mode();
 static bool cjh_in_visual_mode();
 
 #include "4coder_default_include.cpp"
+
+static Buffer_Identifier cjh_status_buffer = buffer_identifier(string_u8_litexpr("*status*"));
+static View_ID cjh_status_footer_panel_view_id;
 
 // Forward declarations
 static void cjh_set_command_map(Application_Links *app, Command_Map_ID new_mapid);
@@ -248,39 +249,58 @@ static Buffer_ID cjh_get_active_buffer(Application_Links *app)
     return result;
 }
 
-static View_ID cjh_open_status_panel(Application_Links *app)
+static Buffer_ID cjh_get_status_buffer(Application_Links *app)
 {
-    if (cjh_status_panel_view_id == 0){
+    Buffer_ID result = get_buffer_by_name(app, string_u8_litexpr("*status*"), Access_Always);
+
+    return result;
+}
+
+static View_ID cjh_open_footer_panel(Application_Links *app, View_ID view, f32 num_lines=14.0f){
+    View_ID special_view = open_view(app, view, ViewSplit_Bottom);
+    new_view_settings(app, special_view);
+    Buffer_ID buffer = view_get_buffer(app, special_view, Access_Always);
+    Face_ID face_id = get_face_id(app, buffer);
+    Face_Metrics metrics = get_face_metrics(app, face_id);
+    view_set_split_pixel_size(app, special_view, (i32)(metrics.line_height*num_lines));
+    view_set_passive(app, special_view, true);
+
+    return special_view;
+}
+
+static View_ID cjh_open_status_footer_panel(Application_Links *app)
+{
+    if (cjh_status_footer_panel_view_id == 0)
+    {
         View_ID view = get_active_view(app, Access_Always);
-        cjh_status_panel_view_id = open_footer_panel(app, view, 1.3f);
-        view_set_setting(app, cjh_status_panel_view_id, ViewSetting_ShowFileBar, false);
+        cjh_status_footer_panel_view_id = cjh_open_footer_panel(app, view, 1.3f);
+        view_set_setting(app, cjh_status_footer_panel_view_id, ViewSetting_ShowFileBar, false);
         view_set_active(app, view);
     }
-    return cjh_status_panel_view_id;
+    return cjh_status_footer_panel_view_id;
+}
+
+static View_ID cjh_get_or_open_status_panel(Application_Links *app)
+{
+    View_ID view = 0;
+    Buffer_ID buffer = cjh_get_status_buffer(app);
+    if (buffer != 0){
+        view = get_first_view_with_buffer(app, buffer);
+    }
+    if (view == 0){
+        view = cjh_open_status_footer_panel(app);
+    }
+    return view;
 }
 
 static void cjh_close_status_panel(Application_Links *app)
 {
-    if (cjh_status_panel_view_id != 0){
-        view_close(app, cjh_status_panel_view_id);
-        cjh_status_panel_view_id = 0;
-    }
-}
-
-static bool cjh_status_panel_active = false;
-static void cjh_toggle_status_panel(Application_Links *app)
-{
-    if (cjh_status_panel_active)
-    {
-        Buffer_ID buffer = view_get_buffer(app, cjh_status_panel_view_id, Access_ReadWrite);
+    if (cjh_status_footer_panel_view_id != 0){
+        Buffer_ID buffer = view_get_buffer(app, cjh_status_footer_panel_view_id, Access_ReadWrite);
         clear_buffer(app, buffer);
-        cjh_close_status_panel(app);
+        view_close(app, cjh_status_footer_panel_view_id);
+        cjh_status_footer_panel_view_id = 0;
     }
-    else
-    {
-        cjh_open_status_panel(app);
-    }
-    cjh_status_panel_active = !cjh_status_panel_active;
 }
 
 static void cjh_side_by_side_panels(Application_Links *app)
@@ -316,10 +336,7 @@ CUSTOM_COMMAND_SIG(cjh_enter_normal_mode)
 {
     cjh_command_mode = CjhCommandMode_Normal;
     cjh_set_command_map(app, cjh_mapid_normal_mode);
-    if (cjh_status_panel_active)
-    {
-        cjh_toggle_status_panel(app);
-    }
+    cjh_close_status_panel(app);
 
     if (cjh_recording_command)
     {
@@ -562,23 +579,40 @@ CUSTOM_COMMAND_SIG(cjh_move_to_end_of_word)
     move_left(app);
 }
 
+static Buffer_ID cjh_get_or_create_buffer(Application_Links *app, Buffer_Identifier buffer_id)
+{
+    Buffer_ID result = 0;
+    if (buffer_id.name != 0 && buffer_id.name_len > 0){
+        String_Const_u8 buffer_name = SCu8(buffer_id.name, buffer_id.name_len);
+        Buffer_ID buffer_attach_id = get_buffer_by_name(app, buffer_name, Access_Always);
+        if (buffer_attach_id != 0){
+            result = buffer_attach_id;
+        }
+        else{
+            buffer_attach_id = create_buffer(app, buffer_name, BufferCreate_AlwaysNew|BufferCreate_NeverAttachToFile);
+            if (buffer_attach_id != 0){
+                result = buffer_attach_id;
+            }
+        }
+    }
+    else{
+        result = buffer_id.id;
+    }
+    return(result);
+}
+
 static void cjh_write_key_to_status_panel(Application_Links *app)
 {
-    if (!cjh_status_panel_active)
-    {
-        cjh_toggle_status_panel(app);
-    }
-    View_ID saved_view = get_active_view(app, Access_ReadWrite);
-    view_set_active(app, cjh_status_panel_view_id);
+    View_ID saved_view = get_active_view(app, Access_Always);
+    View_ID status_view = cjh_get_or_open_status_panel(app);
+    Buffer_ID status_buffer = cjh_get_or_create_buffer(app, cjh_status_buffer);
+    view_set_buffer(app, status_view, status_buffer, 0);
+    view_set_active(app, status_view);
+
     User_Input in = get_current_input(app);
     char *key_name = key_code_name[in.event.key.code];
     write_text(app, SCu8(key_name));
     write_text(app, SCu8(" "));
-#if 0
-    char s[32];
-    sprintf(s, "View_ID: %d ", cjh_status_panel_view_id);
-    write_text(app, SCu8(s));
-#endif
     view_set_active(app, saved_view);
 }
 
@@ -1587,6 +1621,28 @@ CUSTOM_COMMAND_SIG(cjh_search_backward)
     cjh_isearch(app, Scan_Backward, pos, SCu8());
 }
 
+
+static void cjh_isearch_identifier(Application_Links *app, Scan_Direction scan)
+{
+    View_ID view = get_active_view(app, Access_ReadVisible);
+    Buffer_ID buffer_id = view_get_buffer(app, view, Access_ReadVisible);
+    i64 pos = view_get_cursor_pos(app, view);
+    Scratch_Block scratch(app);
+    Range_i64 range = enclose_pos_alpha_numeric_underscore(app, buffer_id, pos);
+    String_Const_u8 query = push_buffer_range(app, scratch, buffer_id, range);
+    cjh_isearch(app, scan, range.first, query);
+}
+
+CUSTOM_COMMAND_SIG(cjh_search_identifier_forward)
+{
+    cjh_isearch_identifier(app, Scan_Forward);
+}
+
+CUSTOM_COMMAND_SIG(cjh_search_identifier_backward)
+{
+    cjh_isearch_identifier(app, Scan_Backward);
+}
+
 CJH_COMMAND_AND_ENTER_NORMAL_MODE(keyboard_macro_replay)
 
 static void cjh_setup_normal_mode_mapping(Mapping *mapping, i64 normal_mode_id)
@@ -1665,18 +1721,17 @@ static void cjh_setup_normal_mode_mapping(Mapping *mapping, i64 normal_mode_id)
     Bind(seek_beginning_of_textual_line, KeyCode_0);
 
     // Shift-<Special characters>
-    Bind(seek_end_of_line, KeyCode_4, KeyCode_Shift);
     Bind(move_up_to_blank_line, KeyCode_LeftBracket, KeyCode_Shift);
     Bind(move_down_to_blank_line, KeyCode_RightBracket, KeyCode_Shift);
     Bind(cjh_toggle_upper_lower, KeyCode_Tick, KeyCode_Shift);
     // !
     // @
-    // #
-    // (define-key cjh-keymap "%" 'cjh-matching-paren)
+    Bind(cjh_search_identifier_backward, KeyCode_3, KeyCode_Shift);
+    Bind(seek_end_of_line, KeyCode_4, KeyCode_Shift);
+    // Bind(cjh_matching_paren, KeyCode_5, KeyCode_Shift);
     Bind(cjh_back_to_indentation, KeyCode_6, KeyCode_Shift);
     // &
-    // TODO(cjh): How is search supposed to work?
-    Bind(search_identifier, KeyCode_8, KeyCode_Shift);
+    Bind(cjh_search_identifier_forward, KeyCode_8, KeyCode_Shift);
     // (
     // )
     // _
