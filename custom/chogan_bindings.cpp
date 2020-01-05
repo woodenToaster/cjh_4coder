@@ -4,6 +4,10 @@
 
 // TODO(chogan): Missing functionality
 // - " /" for project wide search
+// - C-o
+// - s/.../.../g
+// - [[
+// - ]]
 // - Layouts
 // - Vim style file search
 // - Jump to panel by number (" w1", " w3", etc.)
@@ -1241,7 +1245,7 @@ static void cjh_setup_space_mapping(Mapping *mapping, i64 space_cmd_map_id)
     // " a"
     Bind(cjh_start_multi_key_cmd_buffer, KeyCode_B);
     // " c"
-    // Bind(); // " d" 'dired)
+    // " d"
     // Bind(); // " en" 'compilation-next-error-function)
     Bind(cjh_start_multi_key_cmd_file, KeyCode_F);
     Bind(cjh_start_multi_key_cmd_help, KeyCode_H);
@@ -1250,17 +1254,14 @@ static void cjh_setup_space_mapping(Mapping *mapping, i64 space_cmd_map_id)
     // Bind(); // " jc" 'ace-jump-char-mode)
     // Bind(); // " jl" 'ace-jump-line-mode))
     // " k"
-    // Bind(); // " ls" 'window-configuration-to-register)
-    // Bind(); // " ll" 'jump-to-register)
+    // " l"
     Bind(cjh_start_multi_key_cmd_macro, KeyCode_M);
     // " n"
     // " o"
     // " p"
     Bind(cjh_start_multi_key_cmd_quit, KeyCode_Q);
-    // Bind(); // " r" 'cjh-reload-init-file)
-    // " ry"
+    // " r"
     Bind(cjh_start_multi_key_cmd_snippet, KeyCode_S);
-    // s/.../.../g
     Bind(cjh_start_multi_key_cmd_toggle, KeyCode_T);
     // " u"
     // " v"
@@ -1753,12 +1754,11 @@ static void cjh_setup_normal_mode_mapping(Mapping *mapping, i64 normal_mode_id)
     // Bind(cjh_goto_mark, KeyCode_Quote);
     Bind(cjh_repeat_last_command, KeyCode_Period);
 
-    // Control-<a-z>
-    // TODO(cjh): Put the cursor in the middle of the screen?
+    // Control modifier
     Bind(page_down, KeyCode_D, KeyCode_Control);
-    // C-l
+    Bind(center_view, KeyCode_L, KeyCode_Control);
+    // C-o
     Bind(page_up, KeyCode_U, KeyCode_Control);
-    // (define-key cjh-keymap (kbd "C-o") 'pop-to-mark-command)
     // C-v
     Bind(set_mark, KeyCode_Space, KeyCode_Control);
     Bind(cjh_insert_semicolon_at_eol, KeyCode_Semicolon, KeyCode_Control);
