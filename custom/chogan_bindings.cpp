@@ -5,6 +5,7 @@
 // TODO(chogan): Missing functionality
 // - " /" for project wide search
 // - C-o
+//   - Decide when to call cjh_push_mark
 // - s/.../.../g
 // - [[
 // - ]]
@@ -65,11 +66,6 @@ struct CjhMultiKeyCmdHooks
     CjhMultiKeyCmdHook *cjh_y_hook;
 };
 
-struct MarkRing
-{
-    
-};
-
 static u8 cjh_last_f_search;
 static bool cjh_last_find_was_til;
 static bool cjh_recording_command;
@@ -91,8 +87,45 @@ static bool cjh_in_visual_mode();
 
 #include "4coder_default_include.cpp"
 
+struct MarkNode
+{
+    i64 pos;
+    Buffer_ID buffer;
+};
+
+#define CJH_MARK_RING_SIZE 128
+
+struct MarkRing
+{
+    u32 count;
+    MarkNode nodes[CJH_MARK_RING_SIZE];
+};
+
+static MarkRing cjh_mark_ring;
 static Buffer_Identifier cjh_status_buffer = buffer_identifier(string_u8_litexpr("*status*"));
 static View_ID cjh_status_footer_panel_view_id;
+
+// MarkRing
+static void cjh_push_mark(Application_Links *app)
+{
+    MarkNode *mark = &cjh_mark_ring.nodes[cjh_mark_ring.count++ % ArrayCount(cjh_mark_ring.nodes)];
+    View_ID view = get_active_view(app, Access_ReadWrite);
+    Buffer_ID buffer = view_get_buffer(app, view, Access_ReadWrite);
+    i64 pos = view_get_cursor_pos(app, view);
+    mark->pos = pos;
+    mark->buffer = buffer;
+}
+
+CUSTOM_COMMAND_SIG(cjh_pop_mark)
+{
+    if (cjh_mark_ring.count > 0)
+    {
+        MarkNode *mark = &cjh_mark_ring.nodes[--cjh_mark_ring.count % ArrayCount(cjh_mark_ring.nodes)];
+        View_ID view = get_active_view(app, Access_ReadWrite);
+        view_set_buffer(app, view, mark->buffer, 0);
+        view_set_cursor(app, view, seek_pos(mark->pos));
+    }
+}
 
 // Forward declarations
 static void cjh_set_command_map(Application_Links *app, Command_Map_ID new_mapid);
@@ -1768,7 +1801,7 @@ static void cjh_setup_normal_mode_mapping(Mapping *mapping, i64 normal_mode_id)
     // Control modifier
     Bind(page_down, KeyCode_D, KeyCode_Control);
     Bind(center_view, KeyCode_L, KeyCode_Control);
-    // C-o
+    Bind(cjh_pop_mark, KeyCode_O, KeyCode_Control);
     Bind(page_up, KeyCode_U, KeyCode_Control);
     // C-v
     Bind(set_mark, KeyCode_Space, KeyCode_Control);
