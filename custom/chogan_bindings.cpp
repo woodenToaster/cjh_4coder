@@ -4,8 +4,6 @@
 
 // TODO(chogan): Missing functionality
 // - " /" for project wide search
-// - C-o
-//   - Decide when to call cjh_push_mark
 // - s/.../.../g
 // - [[
 // - ]]
@@ -218,6 +216,13 @@ static void cjh_visual_line_mode_hook(Application_Links *app)
     cjh_begin_visual_line_mode_range(app);
 }
 
+#define CJH_CMD_AND_PUSH_MARK(cmd)              \
+    CUSTOM_COMMAND_SIG(cjh_##cmd##_push_mark)   \
+    {                                           \
+        cmd(app);                               \
+        cjh_enter_normal_mode(app);             \
+    }
+
 #define CJH_START_MULTI_KEY_CMD(category)                        \
     CUSTOM_COMMAND_SIG(cjh_start_multi_key_cmd_##category)       \
     {                                                            \
@@ -391,6 +396,9 @@ CUSTOM_COMMAND_SIG(cjh_enter_normal_mode)
         cjh_recording_command = false;
     }
 
+    // NOTE(cjh): This should go in CJH_CMD_AND_PUSH_MARK if it is ever removed
+    // from here.
+    cjh_push_mark(app);
     global_config.highlight_range = 0;
 }
 
@@ -1089,13 +1097,13 @@ static void cjh_setup_g_mapping(Mapping *mapping, i64 g_cmd_map_id)
 {
     CJH_CMD_MAPPING_PREAMBLE(g_cmd_map_id);
 
-    Bind(cjh_goto_beginning_of_file, KeyCode_B);
     Bind(cjh_comment_line_toggle, KeyCode_C);
     // TODO(cjh): This doesn't really work
     Bind(cjh_list_all_locations_of_type_definition_of_identifier, KeyCode_D);
     // Bind(backward-to-word, KeyCode_E);
     Bind(cjh_open_file_in_quotes, KeyCode_F);
-    Bind(cjh_goto_line, KeyCode_G);
+    Bind(cjh_goto_beginning_of_file, KeyCode_G);
+    Bind(cjh_goto_line, KeyCode_L);
     // Bind(cjh_goto_next_function, KeyCode_N);
     // Bind(cjh_goto_prev_function, KeyCode_P);
 }
@@ -1657,6 +1665,7 @@ CUSTOM_COMMAND_SIG(cjh_search_forward)
     View_ID view = get_active_view(app, Access_ReadVisible);
     i64 pos = view_get_cursor_pos(app, view);;
     cjh_isearch(app, Scan_Forward, pos, SCu8());
+    cjh_push_mark(app);
 }
 
 CUSTOM_COMMAND_SIG(cjh_search_backward)
@@ -1664,6 +1673,7 @@ CUSTOM_COMMAND_SIG(cjh_search_backward)
     View_ID view = get_active_view(app, Access_ReadVisible);
     i64 pos = view_get_cursor_pos(app, view);;
     cjh_isearch(app, Scan_Backward, pos, SCu8());
+    cjh_push_mark(app);
 }
 
 
@@ -1676,6 +1686,7 @@ static void cjh_isearch_identifier(Application_Links *app, Scan_Direction scan)
     Range_i64 range = enclose_pos_alpha_numeric_underscore(app, buffer_id, pos);
     String_Const_u8 query = push_buffer_range(app, scratch, buffer_id, range);
     cjh_isearch(app, scan, range.first, query);
+    cjh_push_mark(app);
 }
 
 CUSTOM_COMMAND_SIG(cjh_search_identifier_forward)
@@ -1689,6 +1700,8 @@ CUSTOM_COMMAND_SIG(cjh_search_identifier_backward)
 }
 
 CJH_COMMAND_AND_ENTER_NORMAL_MODE(keyboard_macro_replay)
+CJH_CMD_AND_PUSH_MARK(move_up_to_blank_line)
+CJH_CMD_AND_PUSH_MARK(move_down_to_blank_line)
 
 static void cjh_setup_normal_mode_mapping(Mapping *mapping, i64 normal_mode_id)
 {
@@ -1766,8 +1779,8 @@ static void cjh_setup_normal_mode_mapping(Mapping *mapping, i64 normal_mode_id)
     Bind(seek_beginning_of_textual_line, KeyCode_0);
 
     // Shift-<Special characters>
-    Bind(move_up_to_blank_line, KeyCode_LeftBracket, KeyCode_Shift);
-    Bind(move_down_to_blank_line, KeyCode_RightBracket, KeyCode_Shift);
+    Bind(cjh_move_up_to_blank_line_push_mark, KeyCode_LeftBracket, KeyCode_Shift);
+    Bind(cjh_move_down_to_blank_line_push_mark, KeyCode_RightBracket, KeyCode_Shift);
     Bind(cjh_toggle_upper_lower, KeyCode_Tick, KeyCode_Shift);
     // !
     // @
