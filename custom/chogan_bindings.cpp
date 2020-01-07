@@ -116,12 +116,22 @@ static void cjh_push_mark(Application_Links *app)
 
 CUSTOM_COMMAND_SIG(cjh_pop_mark)
 {
-    if (cjh_mark_ring.count > 0)
+    View_ID view = get_active_view(app, Access_ReadWrite);
+    i64 cursor = view_get_cursor_pos(app, view);
+
+    for (;cjh_mark_ring.count > 0;)
     {
         MarkNode *mark = &cjh_mark_ring.nodes[--cjh_mark_ring.count % ArrayCount(cjh_mark_ring.nodes)];
-        View_ID view = get_active_view(app, Access_ReadWrite);
-        view_set_buffer(app, view, mark->buffer, 0);
-        view_set_cursor(app, view, seek_pos(mark->pos));
+        if (mark->pos == cursor)
+        {
+            continue;
+        }
+        else
+        {
+            view_set_buffer(app, view, mark->buffer, 0);
+            view_set_cursor(app, view, seek_pos(mark->pos));
+            break;
+        }
     }
 }
 
