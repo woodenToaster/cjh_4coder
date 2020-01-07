@@ -3,10 +3,10 @@
 // TOP
 
 // TODO(chogan): Missing functionality
+// - ]] or gn
+// - [[ or gp
 // - " /" for project wide search
 // - s/.../.../g
-// - [[
-// - ]]
 // - Layouts
 // - Vim style search in buffer
 // - Jump to panel by number (" w1", " w3", etc.)
@@ -263,6 +263,24 @@ CJH_START_MULTI_KEY_CMD(window)
 CJH_START_MULTI_KEY_CMD(y)
 
 // Helpers
+static i64 cjh_get_next_function_position(Application_Links *app, Buffer_ID buffer)
+{
+    i64 result = 0;
+    Function_Positions position_result = {};
+    Token_Array array = get_token_array_from_buffer(app, buffer);
+
+    if (array.tokens != 0)
+    {
+        View_ID view = get_active_view(app, Access_ReadWrite);
+        i64 pos = view_get_cursor_pos(app, view);
+        i64 token_index = token_index_from_pos(&array, pos);
+        Get_Positions_Results get_positions_results = get_function_positions(app, buffer, token_index,
+                                                                             &position_result, 1);
+    }
+    result = position_result.sig_start_index;
+    return result;
+}
+
 static void cjh_set_command_map(Application_Links *app, Command_Map_ID new_mapid)
 {
     Buffer_ID buffer_id = view_get_buffer(app, get_active_view(app, Access_ReadVisible), Access_ReadVisible);
@@ -1103,6 +1121,15 @@ CJH_COMMAND_AND_ENTER_NORMAL_MODE(list_all_locations_of_type_definition_of_ident
 CJH_COMMAND_AND_ENTER_NORMAL_MODE(open_file_in_quotes)
 CJH_COMMAND_AND_ENTER_NORMAL_MODE(goto_line)
 
+CUSTOM_COMMAND_SIG(cjh_goto_next_function)
+{
+    View_ID view = get_active_view(app, Access_ReadWrite);
+    Buffer_ID buffer = view_get_buffer(app, view, Access_ReadWrite);
+    i64 next_func_pos = cjh_get_next_function_position(app, buffer);
+    view_set_cursor(app, view, seek_pos(next_func_pos));
+    cjh_enter_normal_mode(app);
+}
+
 static void cjh_setup_g_mapping(Mapping *mapping, i64 g_cmd_map_id)
 {
     CJH_CMD_MAPPING_PREAMBLE(g_cmd_map_id);
@@ -1114,7 +1141,7 @@ static void cjh_setup_g_mapping(Mapping *mapping, i64 g_cmd_map_id)
     Bind(cjh_open_file_in_quotes, KeyCode_F);
     Bind(cjh_goto_beginning_of_file, KeyCode_G);
     Bind(cjh_goto_line, KeyCode_L);
-    // Bind(cjh_goto_next_function, KeyCode_N);
+    Bind(cjh_goto_next_function, KeyCode_N);
     // Bind(cjh_goto_prev_function, KeyCode_P);
 }
 
@@ -1295,6 +1322,31 @@ static void cjh_setup_visual_mode_mapping(Mapping *mapping, i64 visual_mode_cmd_
     Bind(cjh_cut, KeyCode_D);
     Bind(cjh_copy, KeyCode_Y);
 }
+
+#if 0
+static bool cjh_toggle_buffer_forward;
+CUSTOM_COMMAND_SIG(cjh_toggle_previous_buffer)
+{
+    Buffer_ID new_buffer = 0;
+    View_ID view = get_active_view(app, Access_Read);
+    Buffer_ID buffer = view_get_buffer(app, view, Access_Read);
+    if (cjh_toggle_buffer_forward)
+    {
+        new_buffer = get_buffer_next(app, buffer, Access_Read);
+    }
+    else
+    {
+        new_buffer = get_buffer_prev(app, buffer, Access_Read);
+    }
+
+    if (new_buffer)
+    {
+        view_set_buffer(app, view, new_buffer);
+        cjh_toggle_buffer_forward = !cjh_toggle_buffer_forward;
+    }
+    cjh_enter_normal_mode(app);
+}
+#endif
 
 // Space Commands
 CJH_COMMAND_AND_ENTER_NORMAL_MODE(command_lister)
