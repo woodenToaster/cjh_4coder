@@ -3,8 +3,6 @@
 // TOP
 
 // TODO(chogan): Missing functionality
-// - ]] or gn
-// - [[ or gp
 // - " /" for project wide search
 // - s/.../.../g
 // - Layouts
@@ -12,6 +10,7 @@
 // - Jump to panel by number (" w1", " w3", etc.)
 // - Syntax highlighting for type names
 // - Keep minibuffer open for displaying messages?
+// - [[ or gp
 // - cjh_fill_paragraph
 // - Use draw_line_highlight for visual line mode
 // - Cut cursor in half during multi key command
@@ -263,7 +262,7 @@ CJH_START_MULTI_KEY_CMD(window)
 CJH_START_MULTI_KEY_CMD(y)
 
 // Helpers
-static i64 cjh_get_next_function_position(Application_Links *app, Buffer_ID buffer)
+static i64 cjh_get_next_function_position(Application_Links *app, Buffer_ID buffer, i64 start_pos)
 {
     i64 result = 0;
     Function_Positions position_result = {};
@@ -271,13 +270,20 @@ static i64 cjh_get_next_function_position(Application_Links *app, Buffer_ID buff
 
     if (array.tokens != 0)
     {
-        View_ID view = get_active_view(app, Access_ReadWrite);
-        i64 pos = view_get_cursor_pos(app, view);
-        i64 token_index = token_index_from_pos(&array, pos);
+        i64 token_index = token_index_from_pos(&array, start_pos);
         Get_Positions_Results get_positions_results = get_function_positions(app, buffer, token_index,
                                                                              &position_result, 1);
     }
-    result = position_result.sig_start_index;
+    result = (array.tokens + position_result.sig_start_index)->pos;
+    if (result == start_pos)
+    {
+        start_pos = (array.tokens + position_result.sig_end_index)->pos + 1;
+        i64 token_index = token_index_from_pos(&array, start_pos);
+        Get_Positions_Results get_positions_results = get_function_positions(app, buffer, token_index,
+                                                                             &position_result, 1);
+        result = (array.tokens + position_result.sig_start_index)->pos;
+    }
+
     return result;
 }
 
@@ -1124,8 +1130,10 @@ CJH_COMMAND_AND_ENTER_NORMAL_MODE(goto_line)
 CUSTOM_COMMAND_SIG(cjh_goto_next_function)
 {
     View_ID view = get_active_view(app, Access_ReadWrite);
+    i64 pos = view_get_cursor_pos(app, view);
     Buffer_ID buffer = view_get_buffer(app, view, Access_ReadWrite);
-    i64 next_func_pos = cjh_get_next_function_position(app, buffer);
+
+    i64 next_func_pos = cjh_get_next_function_position(app, buffer, pos);
     view_set_cursor(app, view, seek_pos(next_func_pos));
     cjh_enter_normal_mode(app);
 }
