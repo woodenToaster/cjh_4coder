@@ -638,8 +638,8 @@ static void cjh_draw_cursor_mark_highlight(Application_Links *app, View_ID view_
             case CjhCommandMode_Visual:
             {
                 Range_i64 range = {};
-                range.start = min(cursor_pos, mark_pos);
-                range.end = max(cursor_pos, mark_pos) + 1;
+                range.start = Min(cursor_pos, mark_pos);
+                range.end = Max(cursor_pos, mark_pos) + 1;
                 draw_character_block(app, text_layout_id, range, 1.0f, fcolor_id(defcolor_highlight));
                 cjh_draw_underbar_cursor(app, text_layout_id, cursor_pos, f_white);
             } break;

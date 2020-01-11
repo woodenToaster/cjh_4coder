@@ -706,12 +706,22 @@ draw_highlight_range(Application_Links *app, View_ID view_id,
     return(has_highlight_range);
 }
 
+function i32
+default_cursor_sub_id(void){
+    i32 result = 0;
+    if (global_keyboard_macro_is_recording){
+        result = 1;
+    }
+    return(result);
+}
+
 function void
 draw_original_4coder_style_cursor_mark_highlight(Application_Links *app, View_ID view_id, b32 is_active_view,
                                                  Buffer_ID buffer, Text_Layout_ID text_layout_id,
                                                  f32 roundness, f32 outline_thickness){
     b32 has_highlight_range = draw_highlight_range(app, view_id, buffer, text_layout_id, roundness);
     if (!has_highlight_range){
+        i32 cursor_sub_id = default_cursor_sub_id();
         i64 cursor_pos = view_get_cursor_pos(app, view_id);
         i64 mark_pos = view_get_mark_pos(app, view_id);
 
@@ -731,7 +741,7 @@ draw_original_4coder_style_cursor_mark_highlight(Application_Links *app, View_ID
 
         if (is_active_view){
             draw_character_block(app, text_layout_id, cursor_pos, roundness,
-                                 fcolor_id(defcolor_normal_cursor));
+                                 fcolor_id(defcolor_normal_cursor, cursor_sub_id));
             paint_text_color_pos(app, text_layout_id, cursor_pos,
                                  fcolor_id(defcolor_at_cursor));
             draw_character_wire_frame(app, text_layout_id, mark_pos,
@@ -744,7 +754,7 @@ draw_original_4coder_style_cursor_mark_highlight(Application_Links *app, View_ID
                                       fcolor_id(defcolor_mark));
             draw_character_wire_frame(app, text_layout_id, cursor_pos,
                                       roundness, outline_thickness,
-                                      fcolor_id(defcolor_normal_cursor));
+                                      fcolor_id(defcolor_normal_cursor, cursor_sub_id));
         }
     }
 }
@@ -755,16 +765,17 @@ draw_notepad_style_cursor_highlight(Application_Links *app, View_ID view_id,
                                     f32 roundness){
     b32 has_highlight_range = draw_highlight_range(app, view_id, buffer, text_layout_id, roundness);
     if (!has_highlight_range){
+        i32 cursor_sub_id = default_cursor_sub_id();
         i64 cursor_pos = view_get_cursor_pos(app, view_id);
         i64 mark_pos = view_get_mark_pos(app, view_id);
         if (cursor_pos != mark_pos && global_config.highlight_range){
             Range_i64 range = Ii64(cursor_pos, mark_pos);
-            draw_character_block(app, text_layout_id, range, roundness,
+            draw_character_block(app, text_layout_id, range, roundness, 
                                  fcolor_id(defcolor_highlight));
             paint_text_color_fcolor(app, text_layout_id, range,
                              fcolor_id(defcolor_at_highlight));
         }
-        draw_character_i_bar(app, text_layout_id, cursor_pos, fcolor_id(defcolor_insert_cursor));
+        draw_character_i_bar(app, text_layout_id, cursor_pos, fcolor_id(defcolor_insert_cursor, cursor_sub_id));
     }
 }
 

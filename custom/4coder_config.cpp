@@ -1534,7 +1534,7 @@ load_config_and_apply(Application_Links *app, Arena *out_arena, Config_Data *con
         config_feedback_string(scratch, &list, "default_theme_name", config->default_theme_name);
         config_feedback_bool(scratch, &list, "highlight_line_at_cursor", config->highlight_line_at_cursor);
         config_feedback_bool(scratch, &list, "highlight_range", config->highlight_range);
-        
+
         config_feedback_string(scratch, &list, "default_font_name", config->default_font_name);
         config_feedback_int(scratch, &list, "default_font_size", config->default_font_size);
         config_feedback_bool(scratch, &list, "default_font_hinting", config->default_font_hinting);
@@ -1556,11 +1556,9 @@ load_config_and_apply(Application_Links *app, Arena *out_arena, Config_Data *con
     change_mode(app, config->mode);
     global_set_setting(app, GlobalSetting_LAltLCtrlIsAltGr, config->lalt_lctrl_is_altgr);
     
-    // TODO(allen): 
-#if 0    
-    change_theme(app, config->default_theme_name.str, config->default_theme_name.size);
-    #endif
-
+    Color_Table *colors = get_color_table_by_name(config->default_theme_name);
+    set_active_color(colors);
+    
     Face_Description description = {};
     if (override_font_size != 0){
         description.parameters.pt_size = override_font_size;
@@ -1569,7 +1567,7 @@ load_config_and_apply(Application_Links *app, Arena *out_arena, Config_Data *con
         description.parameters.pt_size = config->default_font_size;
     }
     description.parameters.hinting = config->default_font_hinting || override_hinting;
-    
+     
     description.font.file_name = config->default_font_name;
     if (!modify_global_face_by_description(app, description)){
         description.font.file_name = get_file_path_in_fonts_folder(scratch, config->default_font_name);

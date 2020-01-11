@@ -23,12 +23,14 @@ api(custom) function f32 buffer_line_y_difference(Application_Links* app, Buffer
 api(custom) function Line_Shift_Vertical buffer_line_shift_y(Application_Links* app, Buffer_ID buffer_id, f32 width, Face_ID face_id, i64 line, f32 y_shift);
 api(custom) function i64 buffer_pos_at_relative_xy(Application_Links* app, Buffer_ID buffer_id, f32 width, Face_ID face_id, i64 base_line, Vec2_f32 relative_xy);
 api(custom) function Rect_f32 buffer_relative_box_of_pos(Application_Links* app, Buffer_ID buffer_id, f32 width, Face_ID face_id, i64 base_line, i64 pos);
+api(custom) function Rect_f32 buffer_padded_box_of_pos(Application_Links* app, Buffer_ID buffer_id, f32 width, Face_ID face_id, i64 base_line, i64 pos);
 api(custom) function i64 buffer_relative_character_from_pos(Application_Links* app, Buffer_ID buffer_id, f32 width, Face_ID face_id, i64 base_line, i64 pos);
 api(custom) function i64 buffer_pos_from_relative_character(Application_Links* app, Buffer_ID buffer_id, f32 width, Face_ID face_id, i64 base_line, i64 relative_character);
 api(custom) function f32 view_line_y_difference(Application_Links* app, View_ID view_id, i64 line_a, i64 line_b);
 api(custom) function Line_Shift_Vertical view_line_shift_y(Application_Links* app, View_ID view_id, i64 line, f32 y_shift);
 api(custom) function i64 view_pos_at_relative_xy(Application_Links* app, View_ID view_id, i64 base_line, Vec2_f32 relative_xy);
 api(custom) function Rect_f32 view_relative_box_of_pos(Application_Links* app, View_ID view_id, i64 base_line, i64 pos);
+api(custom) function Rect_f32 view_padded_box_of_pos(Application_Links* app, View_ID view_id, i64 base_line, i64 pos);
 api(custom) function i64 view_relative_character_from_pos(Application_Links* app, View_ID view_id, i64 base_line, i64 pos);
 api(custom) function i64 view_pos_from_relative_character(Application_Links* app, View_ID view_id, i64 base_line, i64 character);
 api(custom) function b32 buffer_exists(Application_Links* app, Buffer_ID buffer_id);
@@ -152,6 +154,7 @@ api(custom) function b32 try_release_face(Application_Links* app, Face_ID id, Fa
 api(custom) function String_Const_u8 push_hot_directory(Application_Links* app, Arena* arena);
 api(custom) function void set_hot_directory(Application_Links* app, String_Const_u8 string);
 api(custom) function void send_exit_signal(Application_Links* app);
+api(custom) function void hard_exit(Application_Links* app);
 api(custom) function void set_window_title(Application_Links* app, String_Const_u8 title);
 api(custom) function Vec2_f32 draw_string_oriented(Application_Links* app, Face_ID font_id, ARGB_Color color, String_Const_u8 str, Vec2_f32 point, u32 flags, Vec2_f32 delta);
 api(custom) function f32 get_string_advance(Application_Links* app, Face_ID font_id, String_Const_u8 str);

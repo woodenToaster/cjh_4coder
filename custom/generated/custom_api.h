@@ -23,12 +23,14 @@
 #define custom_buffer_line_shift_y_sig() Line_Shift_Vertical custom_buffer_line_shift_y(Application_Links* app, Buffer_ID buffer_id, f32 width, Face_ID face_id, i64 line, f32 y_shift)
 #define custom_buffer_pos_at_relative_xy_sig() i64 custom_buffer_pos_at_relative_xy(Application_Links* app, Buffer_ID buffer_id, f32 width, Face_ID face_id, i64 base_line, Vec2_f32 relative_xy)
 #define custom_buffer_relative_box_of_pos_sig() Rect_f32 custom_buffer_relative_box_of_pos(Application_Links* app, Buffer_ID buffer_id, f32 width, Face_ID face_id, i64 base_line, i64 pos)
+#define custom_buffer_padded_box_of_pos_sig() Rect_f32 custom_buffer_padded_box_of_pos(Application_Links* app, Buffer_ID buffer_id, f32 width, Face_ID face_id, i64 base_line, i64 pos)
 #define custom_buffer_relative_character_from_pos_sig() i64 custom_buffer_relative_character_from_pos(Application_Links* app, Buffer_ID buffer_id, f32 width, Face_ID face_id, i64 base_line, i64 pos)
 #define custom_buffer_pos_from_relative_character_sig() i64 custom_buffer_pos_from_relative_character(Application_Links* app, Buffer_ID buffer_id, f32 width, Face_ID face_id, i64 base_line, i64 relative_character)
 #define custom_view_line_y_difference_sig() f32 custom_view_line_y_difference(Application_Links* app, View_ID view_id, i64 line_a, i64 line_b)
 #define custom_view_line_shift_y_sig() Line_Shift_Vertical custom_view_line_shift_y(Application_Links* app, View_ID view_id, i64 line, f32 y_shift)
 #define custom_view_pos_at_relative_xy_sig() i64 custom_view_pos_at_relative_xy(Application_Links* app, View_ID view_id, i64 base_line, Vec2_f32 relative_xy)
 #define custom_view_relative_box_of_pos_sig() Rect_f32 custom_view_relative_box_of_pos(Application_Links* app, View_ID view_id, i64 base_line, i64 pos)
+#define custom_view_padded_box_of_pos_sig() Rect_f32 custom_view_padded_box_of_pos(Application_Links* app, View_ID view_id, i64 base_line, i64 pos)
 #define custom_view_relative_character_from_pos_sig() i64 custom_view_relative_character_from_pos(Application_Links* app, View_ID view_id, i64 base_line, i64 pos)
 #define custom_view_pos_from_relative_character_sig() i64 custom_view_pos_from_relative_character(Application_Links* app, View_ID view_id, i64 base_line, i64 character)
 #define custom_buffer_exists_sig() b32 custom_buffer_exists(Application_Links* app, Buffer_ID buffer_id)
@@ -152,6 +154,7 @@
 #define custom_push_hot_directory_sig() String_Const_u8 custom_push_hot_directory(Application_Links* app, Arena* arena)
 #define custom_set_hot_directory_sig() void custom_set_hot_directory(Application_Links* app, String_Const_u8 string)
 #define custom_send_exit_signal_sig() void custom_send_exit_signal(Application_Links* app)
+#define custom_hard_exit_sig() void custom_hard_exit(Application_Links* app)
 #define custom_set_window_title_sig() void custom_set_window_title(Application_Links* app, String_Const_u8 title)
 #define custom_draw_string_oriented_sig() Vec2_f32 custom_draw_string_oriented(Application_Links* app, Face_ID font_id, ARGB_Color color, String_Const_u8 str, Vec2_f32 point, u32 flags, Vec2_f32 delta)
 #define custom_get_string_advance_sig() f32 custom_get_string_advance(Application_Links* app, Face_ID font_id, String_Const_u8 str)
@@ -197,12 +200,14 @@ typedef f32 custom_buffer_line_y_difference_type(Application_Links* app, Buffer_
 typedef Line_Shift_Vertical custom_buffer_line_shift_y_type(Application_Links* app, Buffer_ID buffer_id, f32 width, Face_ID face_id, i64 line, f32 y_shift);
 typedef i64 custom_buffer_pos_at_relative_xy_type(Application_Links* app, Buffer_ID buffer_id, f32 width, Face_ID face_id, i64 base_line, Vec2_f32 relative_xy);
 typedef Rect_f32 custom_buffer_relative_box_of_pos_type(Application_Links* app, Buffer_ID buffer_id, f32 width, Face_ID face_id, i64 base_line, i64 pos);
+typedef Rect_f32 custom_buffer_padded_box_of_pos_type(Application_Links* app, Buffer_ID buffer_id, f32 width, Face_ID face_id, i64 base_line, i64 pos);
 typedef i64 custom_buffer_relative_character_from_pos_type(Application_Links* app, Buffer_ID buffer_id, f32 width, Face_ID face_id, i64 base_line, i64 pos);
 typedef i64 custom_buffer_pos_from_relative_character_type(Application_Links* app, Buffer_ID buffer_id, f32 width, Face_ID face_id, i64 base_line, i64 relative_character);
 typedef f32 custom_view_line_y_difference_type(Application_Links* app, View_ID view_id, i64 line_a, i64 line_b);
 typedef Line_Shift_Vertical custom_view_line_shift_y_type(Application_Links* app, View_ID view_id, i64 line, f32 y_shift);
 typedef i64 custom_view_pos_at_relative_xy_type(Application_Links* app, View_ID view_id, i64 base_line, Vec2_f32 relative_xy);
 typedef Rect_f32 custom_view_relative_box_of_pos_type(Application_Links* app, View_ID view_id, i64 base_line, i64 pos);
+typedef Rect_f32 custom_view_padded_box_of_pos_type(Application_Links* app, View_ID view_id, i64 base_line, i64 pos);
 typedef i64 custom_view_relative_character_from_pos_type(Application_Links* app, View_ID view_id, i64 base_line, i64 pos);
 typedef i64 custom_view_pos_from_relative_character_type(Application_Links* app, View_ID view_id, i64 base_line, i64 character);
 typedef b32 custom_buffer_exists_type(Application_Links* app, Buffer_ID buffer_id);
@@ -326,6 +331,7 @@ typedef b32 custom_try_release_face_type(Application_Links* app, Face_ID id, Fac
 typedef String_Const_u8 custom_push_hot_directory_type(Application_Links* app, Arena* arena);
 typedef void custom_set_hot_directory_type(Application_Links* app, String_Const_u8 string);
 typedef void custom_send_exit_signal_type(Application_Links* app);
+typedef void custom_hard_exit_type(Application_Links* app);
 typedef void custom_set_window_title_type(Application_Links* app, String_Const_u8 title);
 typedef Vec2_f32 custom_draw_string_oriented_type(Application_Links* app, Face_ID font_id, ARGB_Color color, String_Const_u8 str, Vec2_f32 point, u32 flags, Vec2_f32 delta);
 typedef f32 custom_get_string_advance_type(Application_Links* app, Face_ID font_id, String_Const_u8 str);
@@ -372,12 +378,14 @@ custom_buffer_line_y_difference_type *buffer_line_y_difference;
 custom_buffer_line_shift_y_type *buffer_line_shift_y;
 custom_buffer_pos_at_relative_xy_type *buffer_pos_at_relative_xy;
 custom_buffer_relative_box_of_pos_type *buffer_relative_box_of_pos;
+custom_buffer_padded_box_of_pos_type *buffer_padded_box_of_pos;
 custom_buffer_relative_character_from_pos_type *buffer_relative_character_from_pos;
 custom_buffer_pos_from_relative_character_type *buffer_pos_from_relative_character;
 custom_view_line_y_difference_type *view_line_y_difference;
 custom_view_line_shift_y_type *view_line_shift_y;
 custom_view_pos_at_relative_xy_type *view_pos_at_relative_xy;
 custom_view_relative_box_of_pos_type *view_relative_box_of_pos;
+custom_view_padded_box_of_pos_type *view_padded_box_of_pos;
 custom_view_relative_character_from_pos_type *view_relative_character_from_pos;
 custom_view_pos_from_relative_character_type *view_pos_from_relative_character;
 custom_buffer_exists_type *buffer_exists;
@@ -501,6 +509,7 @@ custom_try_release_face_type *try_release_face;
 custom_push_hot_directory_type *push_hot_directory;
 custom_set_hot_directory_type *set_hot_directory;
 custom_send_exit_signal_type *send_exit_signal;
+custom_hard_exit_type *hard_exit;
 custom_set_window_title_type *set_window_title;
 custom_draw_string_oriented_type *draw_string_oriented;
 custom_get_string_advance_type *get_string_advance;
@@ -548,12 +557,14 @@ internal f32 buffer_line_y_difference(Application_Links* app, Buffer_ID buffer_i
 internal Line_Shift_Vertical buffer_line_shift_y(Application_Links* app, Buffer_ID buffer_id, f32 width, Face_ID face_id, i64 line, f32 y_shift);
 internal i64 buffer_pos_at_relative_xy(Application_Links* app, Buffer_ID buffer_id, f32 width, Face_ID face_id, i64 base_line, Vec2_f32 relative_xy);
 internal Rect_f32 buffer_relative_box_of_pos(Application_Links* app, Buffer_ID buffer_id, f32 width, Face_ID face_id, i64 base_line, i64 pos);
+internal Rect_f32 buffer_padded_box_of_pos(Application_Links* app, Buffer_ID buffer_id, f32 width, Face_ID face_id, i64 base_line, i64 pos);
 internal i64 buffer_relative_character_from_pos(Application_Links* app, Buffer_ID buffer_id, f32 width, Face_ID face_id, i64 base_line, i64 pos);
 internal i64 buffer_pos_from_relative_character(Application_Links* app, Buffer_ID buffer_id, f32 width, Face_ID face_id, i64 base_line, i64 relative_character);
 internal f32 view_line_y_difference(Application_Links* app, View_ID view_id, i64 line_a, i64 line_b);
 internal Line_Shift_Vertical view_line_shift_y(Application_Links* app, View_ID view_id, i64 line, f32 y_shift);
 internal i64 view_pos_at_relative_xy(Application_Links* app, View_ID view_id, i64 base_line, Vec2_f32 relative_xy);
 internal Rect_f32 view_relative_box_of_pos(Application_Links* app, View_ID view_id, i64 base_line, i64 pos);
+internal Rect_f32 view_padded_box_of_pos(Application_Links* app, View_ID view_id, i64 base_line, i64 pos);
 internal i64 view_relative_character_from_pos(Application_Links* app, View_ID view_id, i64 base_line, i64 pos);
 internal i64 view_pos_from_relative_character(Application_Links* app, View_ID view_id, i64 base_line, i64 character);
 internal b32 buffer_exists(Application_Links* app, Buffer_ID buffer_id);
@@ -677,6 +688,7 @@ internal b32 try_release_face(Application_Links* app, Face_ID id, Face_ID replac
 internal String_Const_u8 push_hot_directory(Application_Links* app, Arena* arena);
 internal void set_hot_directory(Application_Links* app, String_Const_u8 string);
 internal void send_exit_signal(Application_Links* app);
+internal void hard_exit(Application_Links* app);
 internal void set_window_title(Application_Links* app, String_Const_u8 title);
 internal Vec2_f32 draw_string_oriented(Application_Links* app, Face_ID font_id, ARGB_Color color, String_Const_u8 str, Vec2_f32 point, u32 flags, Vec2_f32 delta);
 internal f32 get_string_advance(Application_Links* app, Face_ID font_id, String_Const_u8 str);
@@ -724,12 +736,14 @@ global custom_buffer_line_y_difference_type *buffer_line_y_difference = 0;
 global custom_buffer_line_shift_y_type *buffer_line_shift_y = 0;
 global custom_buffer_pos_at_relative_xy_type *buffer_pos_at_relative_xy = 0;
 global custom_buffer_relative_box_of_pos_type *buffer_relative_box_of_pos = 0;
+global custom_buffer_padded_box_of_pos_type *buffer_padded_box_of_pos = 0;
 global custom_buffer_relative_character_from_pos_type *buffer_relative_character_from_pos = 0;
 global custom_buffer_pos_from_relative_character_type *buffer_pos_from_relative_character = 0;
 global custom_view_line_y_difference_type *view_line_y_difference = 0;
 global custom_view_line_shift_y_type *view_line_shift_y = 0;
 global custom_view_pos_at_relative_xy_type *view_pos_at_relative_xy = 0;
 global custom_view_relative_box_of_pos_type *view_relative_box_of_pos = 0;
+global custom_view_padded_box_of_pos_type *view_padded_box_of_pos = 0;
 global custom_view_relative_character_from_pos_type *view_relative_character_from_pos = 0;
 global custom_view_pos_from_relative_character_type *view_pos_from_relative_character = 0;
 global custom_buffer_exists_type *buffer_exists = 0;
@@ -853,6 +867,7 @@ global custom_try_release_face_type *try_release_face = 0;
 global custom_push_hot_directory_type *push_hot_directory = 0;
 global custom_set_hot_directory_type *set_hot_directory = 0;
 global custom_send_exit_signal_type *send_exit_signal = 0;
+global custom_hard_exit_type *hard_exit = 0;
 global custom_set_window_title_type *set_window_title = 0;
 global custom_draw_string_oriented_type *draw_string_oriented = 0;
 global custom_get_string_advance_type *get_string_advance = 0;
