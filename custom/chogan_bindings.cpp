@@ -1360,6 +1360,18 @@ CUSTOM_COMMAND_SIG(cjh_toggle_previous_buffer)
 CJH_COMMAND_AND_ENTER_NORMAL_MODE(command_lister)
 CJH_COMMAND_AND_ENTER_NORMAL_MODE(list_all_locations)
 
+CUSTOM_COMMAND_SIG(cjh_interactive_search_project_ag)
+{
+    Scratch_Block scratch(app);
+    View_ID view = get_this_ctx_view(app, Access_Always);
+    String_Const_u8 needle = query_user_list_needle(app, scratch);
+
+    String_u8 ag = Su8((u8*)"ag ", 3, 128);
+    string_append(&ag, needle);
+    exec_system_command(app, view, buffer_identifier(string_u8_litexpr("*search*")),
+                        SCu8("."), SCu8(ag.str, ag.size), CLI_OverlapWithConflict | CLI_SendEndSignal);
+}
+
 static void cjh_setup_space_mapping(Mapping *mapping, i64 space_cmd_map_id)
 {
     CJH_CMD_MAPPING_PREAMBLE(space_cmd_map_id);
@@ -1392,7 +1404,8 @@ static void cjh_setup_space_mapping(Mapping *mapping, i64 space_cmd_map_id)
     // " y"
     // " z"
     Bind(cjh_command_lister, KeyCode_Space);
-    Bind(cjh_list_all_locations, KeyCode_ForwardSlash);
+    // Bind(cjh_list_all_locations, KeyCode_ForwardSlash);
+    Bind(cjh_interactive_search_project_ag, KeyCode_ForwardSlash);
     // Bind(cjh_toggle_previous_buffer, KeyCode_Tab);
     Bind(cjh_insert_newline_above, KeyCode_LeftBracket);
     Bind(cjh_insert_newline_below, KeyCode_RightBracket);
