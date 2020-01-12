@@ -291,17 +291,24 @@ chogan_render_buffer(Application_Links *app, View_ID view_id, Face_ID face_id,
     View_ID active_view = get_active_view(app, Access_Always);
     b32 is_active_view = (active_view == view_id);
     Rect_f32 prev_clip = draw_set_clip(app, rect);
-    
+
     // NOTE(allen): Token colorizing
     Token_Array token_array = get_token_array_from_buffer(app, buffer);
-    if (token_array.tokens != 0){
+    String_Const_u8 search_buffer_name = string_u8_litexpr("*search*");
+    Buffer_ID search_buffer = get_buffer_by_name(app, search_buffer_name, Access_Always);
+
+    if (buffer == search_buffer)
+    {
+        cjh_draw_search_buffer_token_colors(app, text_layout_id, &token_array);
+    }
+    else if (token_array.tokens != 0){
         draw_cpp_token_colors(app, text_layout_id, &token_array);
         
         // NOTE(allen): Scan for TODOs and NOTEs
         if (global_config.use_comment_keyword){
             Comment_Highlight_Pair pairs[] = {
                 {string_u8_litexpr("NOTE"), finalize_color(defcolor_comment_pop, 0)},
-                {string_u8_litexpr("TODO"), finalize_color(defcolor_comment_pop, 1)},
+                {string_u8_litexpr("TODO"), finalize_color(defcolor_comment_pop, 1)}
             };
             draw_comment_highlights(app, buffer, text_layout_id,
                                     &token_array, pairs, ArrayCount(pairs));
@@ -341,7 +348,7 @@ chogan_render_buffer(Application_Links *app, View_ID view_id, Face_ID face_id,
     }
     
     // NOTE(allen): Color parens
-    if (global_config.use_paren_helper){
+    if (global_config.use_paren_helper && buffer != search_buffer){
         Color_Array colors = finalize_color_array(defcolor_text_cycle);
         draw_paren_highlight(app, buffer, text_layout_id, cursor_pos, colors.vals, colors.count);
     }

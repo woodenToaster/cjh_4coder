@@ -262,6 +262,31 @@ CJH_START_MULTI_KEY_CMD(window)
 CJH_START_MULTI_KEY_CMD(y)
 
 // Helpers
+
+static void cjh_draw_search_buffer_token_colors(Application_Links *app, Text_Layout_ID text_layout_id,
+                                                Token_Array *array)
+{
+    Range_i64 visible_range = text_layout_get_visible_range(app, text_layout_id);
+#if 0
+    i64 first_index = token_index_from_pos(array, visible_range.first);
+    Token_Iterator_Array it = token_iterator_index(0, array, first_index);
+    for (;;){
+        Token *token = token_it_read(&it);
+        if (token->pos >= visible_range.one_past_last){
+            break;
+        }
+        FColor color = get_token_color_cpp(*token);
+        ARGB_Color argb = fcolor_resolve(color);
+        paint_text_color(app, text_layout_id, Ii64_size(token->pos, token->size), argb);
+        if (!token_it_inc_all(&it)){
+            break;
+        }
+    }
+#else
+    paint_text_color_fcolor(app, text_layout_id, visible_range, fcolor_id(defcolor_text_default));
+#endif
+}
+
 static i64 cjh_get_next_function_position(Application_Links *app, Buffer_ID buffer, i64 start_pos)
 {
     i64 result = 0;
@@ -1368,10 +1393,23 @@ CUSTOM_COMMAND_SIG(cjh_interactive_search_project_ag)
     View_ID view = get_this_ctx_view(app, Access_Always);
     String_Const_u8 needle = query_user_list_needle(app, scratch);
 
-    String_u8 ag = Su8((u8*)"ag ", 3, 128);
-    string_append(&ag, needle);
-    exec_system_command(app, view, buffer_identifier(string_u8_litexpr("*search*")),
-                        SCu8("."), SCu8(ag.str, ag.size), CLI_OverlapWithConflict | CLI_SendEndSignal);
+    if (needle.size > 0)
+    {
+        char ag_cmd[] = "ag ";
+        String_u8 ag = Su8((u8 *)ag_cmd, 3, 128);
+        string_append(&ag, needle);
+        // TODO(cjh): Use project dir?
+        String_Const_u8 dir = SCu8(".");
+        exec_system_command(app, view, buffer_identifier(string_u8_litexpr("*search*")),
+                            dir, SCu8(ag.str, ag.size), CLI_OverlapWithConflict | CLI_SendEndSignal);
+
+        // TODO(cjh): Display search buffer view. Horizontal?
+        // TODO(cjh): Jump list
+        // TODO(cjh): Highlight search results and filename
+        // TODO(cjh): Interactive (async ag)
+    }
+
+    cjh_enter_normal_mode(app);
 }
 
 static void cjh_setup_space_mapping(Mapping *mapping, i64 space_cmd_map_id)
@@ -1793,6 +1831,8 @@ static void cjh_setup_normal_mode_mapping(Mapping *mapping, i64 normal_mode_id)
     MappingScope();
     SelectMapping(mapping);
     SelectMap(normal_mode_id);
+
+    BindCore(default_try_exit, CoreCode_TryExit);
 
     BindMouseWheel(mouse_wheel_scroll);
     BindMouse(click_set_cursor_and_mark, MouseCode_Left);
