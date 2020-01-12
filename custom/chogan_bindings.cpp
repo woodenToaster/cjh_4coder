@@ -894,6 +894,8 @@ static void cjh_setup_quit_mapping(Mapping *mapping, i64 quit_cmd_map_id)
 {
     CJH_CMD_MAPPING_PREAMBLE(quit_cmd_map_id);
 
+    BindCore(default_try_exit, CoreCode_TryExit);
+
     Bind(exit_4coder, KeyCode_Q);
 }
 

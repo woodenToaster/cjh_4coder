@@ -6,9 +6,9 @@ MinimumVisualStudioVersion = 10.0.40219.1
 Project("{911E67C6-3D85-4FCE-B560-20A9C3E3FF48}") = "4ed", "4ed.exe", "{F7677BD0-08C2-475E-8BBC-BF1971C912FA}"
 	ProjectSection(DebuggerProjectSystem) = preProject
 		PortSupplier = 00000000-0000-0000-0000-000000000000
-		Executable = D:\programs\cjh_4coder\4ed.exe
+		Executable = D:\programs\4coder\cjh_4coder\4ed.exe
 		RemoteMachine = DESKTOP-VM0EFH9
-		StartingDirectory = D:\programs\cjh_4coder
+		StartingDirectory = D:\programs\4coder\cjh_4coder
 		Environment = Default
 		LaunchingEngine = 00000000-0000-0000-0000-000000000000
 		UseLegacyDebugEngines = No
@@ -21,7 +21,7 @@ Global
 		Release|x64 = Release|x64
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
-		{F7677BD0-08C2-475E-8BBC-BF1971C912FA}.Release|x64.ActiveCfg = Release|x64
+		{F7677BD0-08C2-475E-8BBC-BF1971C912FA}.Release|x64.ActiveCfg = Release
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
