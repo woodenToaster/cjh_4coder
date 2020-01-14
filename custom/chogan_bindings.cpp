@@ -1387,10 +1387,96 @@ CUSTOM_COMMAND_SIG(cjh_toggle_previous_buffer)
 CJH_COMMAND_AND_ENTER_NORMAL_MODE(command_lister)
 CJH_COMMAND_AND_ENTER_NORMAL_MODE(list_all_locations)
 
+static Async_Task cjh_ag_async_task = 0;
+
+void cjh_run_ag_async(struct Async_Context *actx, Data data)
+{
+    Application_Links *app = actx->app;
+    View_ID view = get_active_view(app, Access_ReadWrite);
+    view = get_view_next(app, view, Access_ReadVisible);
+
+    String_Const_u8 dir = SCu8(".");
+    String_u8 ag = Su8(data.data, data.size);
+    exec_system_command(app, view, buffer_identifier(string_u8_litexpr("*search*")),
+                        dir, SCu8(ag.str, ag.size), CLI_OverlapWithConflict | CLI_AlwaysBindToView);
+}
+
 CUSTOM_COMMAND_SIG(cjh_interactive_search_project_ag)
 {
-    Scratch_Block scratch(app);
-    View_ID view = get_this_ctx_view(app, Access_Always);
+    Query_Bar_Group group(app);
+    Query_Bar bar = {};
+    if (start_query_bar(app, &bar, 0) == 0)
+    {
+        return;
+    }
+
+    char ag_cmd[256] = "ag ";
+    u64 ag_cmd_size = cstring_length(ag_cmd);
+    String_u8 ag = Su8((u8 *)ag_cmd, ag_cmd_size, 256);
+    u8 bar_string_space[256];
+    bar.string = SCu8(bar_string_space, (u64)0);
+
+    String_Const_u8 proj_search_str = string_u8_litexpr("Project Search: ");
+    bar.prompt = proj_search_str;
+
+    User_Input in = {};
+    bool done = false;
+    for (;!done;)
+    {
+        in = get_next_input(app, EventProperty_TextInsert,
+                            EventProperty_Escape|EventProperty_ViewActivation);
+        if (in.abort)
+        {
+            break;
+        }
+
+        switch(in.event.kind)
+        {
+            case InputEventKind_TextInsert:
+            {
+                String_Const_u8 string = to_writable(&in);
+                b32 string_change = false;
+
+                if (match_key_code(&in, KeyCode_Return))
+                {
+                    done = true;
+                    break;
+                }
+                else if (string.str != 0 && string.size > 0)
+                {
+                    String_u8 bar_string = Su8(bar.string, sizeof(bar_string_space));
+                    string_append(&bar_string, string);
+                    bar.string = bar_string.string;
+                    string_change = true;
+                }
+
+                if (string_change)
+                {
+                    string_append(&ag, string);
+#if 1
+                    View_ID view = get_active_view(app, Access_ReadWrite);
+                    view = get_view_next(app, view, Access_ReadVisible);
+                    String_Const_u8 dir = SCu8(".");
+                    exec_system_command(app, view, buffer_identifier(string_u8_litexpr("*search*")),
+                                        dir, SCu8(ag.str, ag.size), CLI_OverlapWithConflict | CLI_AlwaysBindToView);
+#else
+                    Data data = {};
+                    data.data = (u8*)ag.string.str;
+                    data.size = ag.size;
+                    // if (async_task_is_running_or_pending(&global_async_system, cjh_ag_async_task))
+                    // {
+                    //     async_task_cancel(&global_async_system, cjh_ag_async_task);
+                    // }
+                    cjh_ag_async_task = async_task_no_dep(&global_async_system, cjh_run_ag_async, data);
+#endif
+                }
+            } break;
+            default:
+                continue;
+        }
+    }
+
+#if 0
     String_Const_u8 needle = query_user_list_needle(app, scratch);
 
     if (needle.size > 0)
@@ -1408,7 +1494,7 @@ CUSTOM_COMMAND_SIG(cjh_interactive_search_project_ag)
         // TODO(cjh): Highlight search results and filename
         // TODO(cjh): Interactive (async ag)
     }
-
+#endif
     cjh_enter_normal_mode(app);
 }
 
