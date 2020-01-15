@@ -300,6 +300,14 @@ chogan_render_buffer(Application_Links *app, View_ID view_id, Face_ID face_id,
     if (buffer == search_buffer)
     {
         cjh_draw_search_buffer_token_colors(app, text_layout_id, &token_array);
+
+        // NOTE(cjh): Highlight line in search buffer
+        if (cjh_search_panel_view_id != 0)
+        {
+            draw_line_highlight(app, text_layout_id, line_number,
+                                fcolor_id(defcolor_highlight_cursor_line));
+        }
+    
     }
     else if (token_array.tokens != 0){
         draw_cpp_token_colors(app, text_layout_id, &token_array);
@@ -346,7 +354,7 @@ chogan_render_buffer(Application_Links *app, View_ID view_id, Face_ID face_id,
             }
         }
     }
-    
+
     // NOTE(allen): Color parens
     if (global_config.use_paren_helper && buffer != search_buffer){
         Color_Array colors = finalize_color_array(defcolor_text_cycle);

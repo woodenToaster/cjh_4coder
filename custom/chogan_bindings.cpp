@@ -4,6 +4,8 @@
 
 // TODO(chogan): Missing functionality
 // - " /" for project wide search
+//   - Turn search results into jump list
+//   - Syntax highlight search results and filenames
 // - s/.../.../g
 // - Layouts
 // - Vim style search in buffer
@@ -101,6 +103,7 @@ struct MarkRing
 static MarkRing cjh_mark_ring;
 static Buffer_Identifier cjh_status_buffer = buffer_identifier(string_u8_litexpr("*status*"));
 static View_ID cjh_status_footer_panel_view_id;
+static View_ID cjh_search_panel_view_id;
 
 // MarkRing
 static void cjh_push_mark(Application_Links *app)
@@ -1403,6 +1406,25 @@ void cjh_run_ag_async(struct Async_Context *actx, Data data)
 
 CUSTOM_COMMAND_SIG(cjh_interactive_search_project_ag)
 {
+    View_ID view = get_this_ctx_view(app, Access_Always);
+
+    if (cjh_search_panel_view_id == 0)
+    {
+        Panel_ID root_panel = panel_get_root(app);
+        if (panel_split(app, root_panel, Dimension_Y))
+        {
+            Panel_ID new_panel_id = panel_get_child(app, root_panel, Side_Max);
+            if (new_panel_id != 0)
+            {
+                cjh_search_panel_view_id = panel_get_view(app, new_panel_id, Access_Always);
+                view_set_setting(app, cjh_search_panel_view_id, ViewSetting_ShowFileBar, false);
+            }
+        }
+
+    }
+
+    view_set_active(app, view);
+
     Query_Bar_Group group(app);
     Query_Bar bar = {};
     if (start_query_bar(app, &bar, 0) == 0)
@@ -1421,80 +1443,85 @@ CUSTOM_COMMAND_SIG(cjh_interactive_search_project_ag)
 
     User_Input in = {};
     bool done = false;
+    u64 highlight_line = 0;
+
     for (;!done;)
     {
-        in = get_next_input(app, EventProperty_TextInsert,
+        in = get_next_input(app, EventPropertyGroup_AnyKeyboardEvent,
                             EventProperty_Escape|EventProperty_ViewActivation);
         if (in.abort)
         {
             break;
         }
 
-        switch(in.event.kind)
+        String_Const_u8 string = to_writable(&in);
+        b32 string_change = false;
+        b32 backspace = false;
+
+        if (match_key_code(&in, KeyCode_Return))
         {
-            case InputEventKind_TextInsert:
+            done = true;
+            break;
+        }
+        else if (match_key_code(&in, KeyCode_Backspace))
+        {
+            string_change = true;
+            backspace = true;
+            if (bar.string.size > 0)
             {
-                String_Const_u8 string = to_writable(&in);
-                b32 string_change = false;
+                bar.string.size--;
+            }
+            if (ag.size > ag_cmd_size)
+            {
+                ag.size--;
+            }
+        }
+        // TODO(cjh): else if (C-j, C-k)
+        else if (string.str != 0 && string.size > 0)
+        {
+            String_u8 bar_string = Su8(bar.string, sizeof(bar_string_space));
+            string_append(&bar_string, string);
+            bar.string = bar_string.string;
+            string_change = true;
+        }
+        else
+        {
+            // NOTE(cjh): This will allow the same input even to be triggered
+            // again, except the next time it will be a TextInsert event.
+            leave_current_input_unhandled(app);
+        }
 
-                if (match_key_code(&in, KeyCode_Return))
-                {
-                    done = true;
-                    break;
-                }
-                else if (string.str != 0 && string.size > 0)
-                {
-                    String_u8 bar_string = Su8(bar.string, sizeof(bar_string_space));
-                    string_append(&bar_string, string);
-                    bar.string = bar_string.string;
-                    string_change = true;
-                }
-
-                if (string_change)
-                {
-                    string_append(&ag, string);
+        if (string_change)
+        {
+            if (!backspace)
+            {
+                string_append(&ag, string);
+            }
 #if 1
-                    View_ID view = get_active_view(app, Access_ReadWrite);
-                    view = get_view_next(app, view, Access_ReadVisible);
-                    String_Const_u8 dir = SCu8(".");
-                    exec_system_command(app, view, buffer_identifier(string_u8_litexpr("*search*")),
-                                        dir, SCu8(ag.str, ag.size), CLI_OverlapWithConflict | CLI_AlwaysBindToView);
+            // View_ID view = get_active_view(app, Access_ReadWrite);
+            // view = get_view_next(app, view, Access_ReadVisible);
+            String_Const_u8 dir = SCu8(".");
+            exec_system_command(app, cjh_search_panel_view_id, buffer_identifier(string_u8_litexpr("*search*")),
+                                dir, SCu8(ag.str, ag.size), CLI_OverlapWithConflict | CLI_AlwaysBindToView);
 #else
-                    Data data = {};
-                    data.data = (u8*)ag.string.str;
-                    data.size = ag.size;
-                    // if (async_task_is_running_or_pending(&global_async_system, cjh_ag_async_task))
-                    // {
-                    //     async_task_cancel(&global_async_system, cjh_ag_async_task);
-                    // }
-                    cjh_ag_async_task = async_task_no_dep(&global_async_system, cjh_run_ag_async, data);
+            Data data = {};
+            data.data = (u8*)ag.string.str;
+            data.size = ag.size;
+            // if (async_task_is_running_or_pending(&global_async_system, cjh_ag_async_task))
+            // {
+            //     async_task_cancel(&global_async_system, cjh_ag_async_task);
+            // }
+            cjh_ag_async_task = async_task_no_dep(&global_async_system, cjh_run_ag_async, data);
 #endif
-                }
-            } break;
-            default:
-                continue;
         }
     }
 
-#if 0
-    String_Const_u8 needle = query_user_list_needle(app, scratch);
-
-    if (needle.size > 0)
+    if (cjh_search_panel_view_id)
     {
-        char ag_cmd[] = "ag ";
-        String_u8 ag = Su8((u8 *)ag_cmd, 3, 128);
-        string_append(&ag, needle);
-        // TODO(cjh): Use project dir?
-        String_Const_u8 dir = SCu8(".");
-        exec_system_command(app, view, buffer_identifier(string_u8_litexpr("*search*")),
-                            dir, SCu8(ag.str, ag.size), CLI_OverlapWithConflict | CLI_SendEndSignal);
-
-        // TODO(cjh): Display search buffer view. Horizontal?
-        // TODO(cjh): Jump list
-        // TODO(cjh): Highlight search results and filename
-        // TODO(cjh): Interactive (async ag)
+        view_close(app, cjh_search_panel_view_id);
+        cjh_search_panel_view_id = 0;
     }
-#endif
+
     cjh_enter_normal_mode(app);
 }
 
@@ -2030,6 +2057,9 @@ static void cjh_setup_normal_mode_mapping(Mapping *mapping, i64 normal_mode_id)
     // C-v
     Bind(set_mark, KeyCode_Space, KeyCode_Control);
     Bind(cjh_insert_semicolon_at_eol, KeyCode_Semicolon, KeyCode_Control);
+
+    // Alt modifier
+    // M-q fill-paragraph
 
     // TODO(chogan): Surround with ("[{'
 }
