@@ -267,27 +267,28 @@ CJH_START_MULTI_KEY_CMD(y)
 // Helpers
 
 static void cjh_draw_search_buffer_token_colors(Application_Links *app, Text_Layout_ID text_layout_id,
-                                                Token_Array *array)
+                                                Buffer_ID buffer_id)
 {
+    Scratch_Block scratch(app);
     Range_i64 visible_range = text_layout_get_visible_range(app, text_layout_id);
-#if 0
-    i64 first_index = token_index_from_pos(array, visible_range.first);
-    Token_Iterator_Array it = token_iterator_index(0, array, first_index);
-    for (;;){
-        Token *token = token_it_read(&it);
-        if (token->pos >= visible_range.one_past_last){
-            break;
-        }
-        FColor color = get_token_color_cpp(*token);
-        ARGB_Color argb = fcolor_resolve(color);
-        paint_text_color(app, text_layout_id, Ii64_size(token->pos, token->size), argb);
-        if (!token_it_inc_all(&it)){
-            break;
-        }
-    }
-#else
+    String_Const_u8 visible_text = push_buffer_range(app, scratch, buffer_id, visible_range);
+
+    String_Const_u8 newline = SCu8("\n");
+    List_String_Const_u8 lines = string_split(scratch, visible_text, newline.str, 1);
+
     paint_text_color_fcolor(app, text_layout_id, visible_range, fcolor_id(defcolor_text_default));
-#endif
+
+    for (Node_String_Const_u8 *node = lines.first;
+         node != 0;
+         node = node->next)
+    {
+
+        String_Const_u8 needle = SCu8("cjh");
+        Range_i64 search_key_range = {};
+        search_key_range.start = string_find_first(node->string, needle, StringMatch_Exact);
+        search_key_range.end = search_key_range.start + 3;
+        paint_text_color_fcolor(app, text_layout_id, search_key_range, fcolor_id(defcolor_keyword));
+    }
 }
 
 static i64 cjh_get_next_function_position(Application_Links *app, Buffer_ID buffer, i64 start_pos)
@@ -1443,7 +1444,7 @@ CUSTOM_COMMAND_SIG(cjh_interactive_search_project_ag)
 
     User_Input in = {};
     bool done = false;
-    u64 highlight_line = 0;
+    // u64 highlight_line = 0;
 
     for (;!done;)
     {
@@ -1486,7 +1487,7 @@ CUSTOM_COMMAND_SIG(cjh_interactive_search_project_ag)
         }
         else
         {
-            // NOTE(cjh): This will allow the same input even to be triggered
+            // NOTE(cjh): This will allow the same input event to be triggered
             // again, except the next time it will be a TextInsert event.
             leave_current_input_unhandled(app);
         }
@@ -1501,8 +1502,9 @@ CUSTOM_COMMAND_SIG(cjh_interactive_search_project_ag)
             // View_ID view = get_active_view(app, Access_ReadWrite);
             // view = get_view_next(app, view, Access_ReadVisible);
             String_Const_u8 dir = SCu8(".");
-            exec_system_command(app, cjh_search_panel_view_id, buffer_identifier(string_u8_litexpr("*search*")),
-                                dir, SCu8(ag.str, ag.size), CLI_OverlapWithConflict | CLI_AlwaysBindToView);
+            Buffer_Identifier search_identifier = buffer_identifier(string_u8_litexpr("*search*"));
+            exec_system_command(app, cjh_search_panel_view_id, search_identifier, dir,
+                                SCu8(ag.str, ag.size), CLI_OverlapWithConflict | CLI_AlwaysBindToView);
 #else
             Data data = {};
             data.data = (u8*)ag.string.str;
