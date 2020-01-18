@@ -3,9 +3,6 @@
 // TOP
 
 // TODO(chogan): Missing functionality
-// - " /" for project wide search
-//   - Turn search results into jump list
-//   - Syntax highlight search results and filenames
 // - s/.../.../g
 // - Layouts
 // - Vim style search in buffer
@@ -80,6 +77,8 @@ static CjhDir cjh_last_find_dir;
 static CjhMultiKeyCmdHooks cjh_multi_key_cmd_hooks;
 static Range_i64 cjh_visual_line_mode_range;
 static Range_i64 cjh_last_command_range;
+static u64 cjh_interactive_search_selected_line;
+static u8 cjh_interactive_search_string[64];
 
 static bool cjh_in_visual_line_mode();
 static bool cjh_in_visual_mode();
@@ -272,22 +271,47 @@ static void cjh_draw_search_buffer_token_colors(Application_Links *app, Text_Lay
     Scratch_Block scratch(app);
     Range_i64 visible_range = text_layout_get_visible_range(app, text_layout_id);
     String_Const_u8 visible_text = push_buffer_range(app, scratch, buffer_id, visible_range);
-
-    String_Const_u8 newline = SCu8("\n");
-    List_String_Const_u8 lines = string_split(scratch, visible_text, newline.str, 1);
+    List_String_Const_u8 lines = string_split(scratch, visible_text, SCu8("\n").str, 1);
 
     paint_text_color_fcolor(app, text_layout_id, visible_range, fcolor_id(defcolor_text_default));
 
+    u64 line_start_pos = 0;
     for (Node_String_Const_u8 *node = lines.first;
          node != 0;
          node = node->next)
     {
+        // NOTE(cjh): Highlight filenames
+        i64 one_past_end_of_filename = string_find_first(node->string, 0, ':');
+        Range_i64 filename_range = {};
+        filename_range.start = line_start_pos;
+        filename_range.end = line_start_pos + one_past_end_of_filename;
+        paint_text_color_fcolor(app, text_layout_id, filename_range, fcolor_id(defcolor_keyword));
 
-        String_Const_u8 needle = SCu8("cjh");
-        Range_i64 search_key_range = {};
-        search_key_range.start = string_find_first(node->string, needle, StringMatch_Exact);
-        search_key_range.end = search_key_range.start + 3;
-        paint_text_color_fcolor(app, text_layout_id, search_key_range, fcolor_id(defcolor_keyword));
+        // NOTE(cjh): Highlight line numbers
+        i64 one_past_line_number = string_find_first(node->string, one_past_end_of_filename + 1, ':');
+        Range_i64 line_number_range = {};
+        line_number_range.start = filename_range.end + 1;
+        line_number_range.end = line_start_pos + one_past_line_number;
+        paint_text_color_fcolor(app, text_layout_id, line_number_range, fcolor_id(defcolor_special_character));
+
+        // NOTE(cjh): Highlight search term
+        String_Const_u8 needle = SCu8(cjh_interactive_search_string);
+        i64 match_start_line_relative = string_find_first(node->string, needle, StringMatch_Exact);
+        i64 match_start_buffer_relative = line_start_pos + match_start_line_relative;
+
+        Range_i64 buffer_range = {};
+        buffer_range.start = match_start_buffer_relative;
+        buffer_range.end = match_start_buffer_relative + cstring_length(cjh_interactive_search_string);
+        paint_text_color_fcolor(app, text_layout_id, buffer_range, fcolor_id(defcolor_keyword));
+
+        // NOTE(cjh): Highlight selected line
+        if (cjh_interactive_search_selected_line > lines.node_count)
+        {
+            cjh_interactive_search_selected_line = lines.node_count;
+        }
+        draw_line_highlight(app, text_layout_id, cjh_interactive_search_selected_line, fcolor_id(defcolor_highlight));
+
+        line_start_pos += node->string.size + 1;
     }
 }
 
@@ -1447,7 +1471,6 @@ CUSTOM_COMMAND_SIG(cjh_interactive_search_project_ag)
                 view_set_setting(app, cjh_search_panel_view_id, ViewSetting_ShowFileBar, false);
             }
         }
-
     }
 
     view_set_active(app, view);
@@ -1467,10 +1490,11 @@ CUSTOM_COMMAND_SIG(cjh_interactive_search_project_ag)
 
     String_Const_u8 proj_search_str = string_u8_litexpr("Project Search: ");
     bar.prompt = proj_search_str;
+    Buffer_Identifier search_identifier = buffer_identifier(string_u8_litexpr("*search*"));
 
     User_Input in = {};
     bool done = false;
-    // u64 highlight_line = 0;
+    cjh_interactive_search_selected_line = 1;
 
     for (;!done;)
     {
@@ -1487,11 +1511,48 @@ CUSTOM_COMMAND_SIG(cjh_interactive_search_project_ag)
 
         if (match_key_code(&in, KeyCode_Return))
         {
+            Scratch_Block scratch(app);
+            Buffer_ID search_buffer = buffer_identifier_to_id(app, search_identifier);
+            String_Const_u8 text = push_buffer_range(app, scratch, search_buffer, buffer_range(app, search_buffer));
+            List_String_Const_u8 lines = string_split(scratch, text, SCu8("\n").str, 1);
+            u64 line = 1;
+
+            for (Node_String_Const_u8 *node = lines.first;
+                 node != 0;
+                 node = node->next)
+            {
+                if (line == cjh_interactive_search_selected_line )
+                {
+                    String_Const_u8 filename = node->string;
+                    i64 one_past_end_of_filename = string_find_first(node->string, 0, ':');
+                    filename.size = one_past_end_of_filename;
+
+                    String_Const_u8 hot_dir = push_hot_directory(app, scratch);
+                    String_u8 full_filename = Su8(hot_dir.str, hot_dir.size, hot_dir.size + filename.size);
+                    string_append(&full_filename, filename);
+
+                    Buffer_ID new_buffer = create_buffer(app, full_filename.string, BufferCreate_MustAttachToFile);
+
+                    if (new_buffer)
+                    {
+                        i64 one_past_line_number = string_find_first(node->string, one_past_end_of_filename + 1, ':');
+                        String_Const_u8 line_number_str = SCu8(node->string.str + filename.size + 1,
+                                                               one_past_line_number - (filename.size + 1));
+                        u64 line_number = string_to_integer(line_number_str, 10);
+
+                        view_set_buffer(app, view, new_buffer, 0);
+                        view_set_cursor(app, view, seek_line_col(line_number, 0));
+                    }
+                }
+
+                line++;
+            }
             done = true;
             break;
         }
         else if (match_key_code(&in, KeyCode_Backspace))
         {
+            // TODO(cjh): Check for alt for word backspace
             string_change = true;
             backspace = true;
             if (bar.string.size > 0)
@@ -1503,12 +1564,25 @@ CUSTOM_COMMAND_SIG(cjh_interactive_search_project_ag)
                 ag.size--;
             }
         }
-        // TODO(cjh): else if (C-j, C-k)
+        else if (match_key_code(&in, KeyCode_J) && has_modifier(&in.event.key.modifiers, KeyCode_Control))
+        {
+            cjh_interactive_search_selected_line++;
+        }
+        else if (match_key_code(&in, KeyCode_K) && has_modifier(&in.event.key.modifiers, KeyCode_Control))
+        {
+            if (cjh_interactive_search_selected_line > 1)
+            {
+                cjh_interactive_search_selected_line--;
+            }
+        }
         else if (string.str != 0 && string.size > 0)
         {
             String_u8 bar_string = Su8(bar.string, sizeof(bar_string_space));
             string_append(&bar_string, string);
             bar.string = bar_string.string;
+
+            memcpy(cjh_interactive_search_string, bar.string.str, bar.string.size);
+            cjh_interactive_search_string[bar.string.size + 1] = 0;
             string_change = true;
         }
         else
@@ -1520,15 +1594,19 @@ CUSTOM_COMMAND_SIG(cjh_interactive_search_project_ag)
 
         if (string_change)
         {
-            if (!backspace)
+            if (backspace)
+            {
+                cjh_interactive_search_string[bar.string.size] = 0;
+            }
+            else
             {
                 string_append(&ag, string);
             }
+            cjh_interactive_search_selected_line = 1;
 #if 1
             // View_ID view = get_active_view(app, Access_ReadWrite);
             // view = get_view_next(app, view, Access_ReadVisible);
             String_Const_u8 dir = SCu8(".");
-            Buffer_Identifier search_identifier = buffer_identifier(string_u8_litexpr("*search*"));
             exec_system_command(app, cjh_search_panel_view_id, search_identifier, dir,
                                 SCu8(ag.str, ag.size), CLI_OverlapWithConflict | CLI_AlwaysBindToView);
 #else
