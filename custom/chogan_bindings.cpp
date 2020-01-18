@@ -856,6 +856,13 @@ CUSTOM_COMMAND_SIG(cjh_repeat_last_find_cmd)
         cjh_enter_normal_mode(app);            \
     }
 
+#define CJH_COMMAND_AND_ENTER_INSERT_MODE(cmd) \
+    CUSTOM_COMMAND_SIG(cjh_##cmd)              \
+    {                                          \
+        cmd(app);                              \
+        cjh_enter_insert_mode(app);            \
+    }
+
 #define CJH_CMD_MAPPING_PREAMBLE(cmd_map_id)        \
     MappingScope();                                 \
     SelectMapping(mapping);                         \
@@ -953,9 +960,9 @@ static void cjh_setup_toggle_mapping(Mapping *mapping, i64 toggle_cmd_map_id)
 // Comma commands
 CJH_COMMAND_AND_ENTER_NORMAL_MODE(build_in_build_panel)
 CJH_COMMAND_AND_ENTER_NORMAL_MODE(save)
-CJH_COMMAND_AND_ENTER_NORMAL_MODE(write_note)
-CJH_COMMAND_AND_ENTER_NORMAL_MODE(write_todo)
 CJH_COMMAND_AND_ENTER_NORMAL_MODE(open_matching_file_cpp)
+CJH_COMMAND_AND_ENTER_INSERT_MODE(write_note)
+CJH_COMMAND_AND_ENTER_INSERT_MODE(write_todo)
 
 static void cjh_setup_comma_mapping(Mapping *mapping, i64 comma_cmd_map_id)
 {
@@ -1114,7 +1121,6 @@ static void cjh_setup_c_mapping(Mapping *mapping, i64 c_cmd_map_id)
 }
 
 // D commands
-CJH_COMMAND_AND_ENTER_NORMAL_MODE(delete_line)
 
 #define CJH_DELETE_COMMAND(motion)              \
     CUSTOM_COMMAND_SIG(motion##_d)              \
@@ -1135,13 +1141,33 @@ CJH_DELETE_COMMAND(cjh_find_backward)
 CJH_DELETE_COMMAND(cjh_find_forward_til)
 CJH_DELETE_COMMAND(cjh_find_backward_til)
 
+static CUSTOM_COMMAND_SIG(cjh_cut_line)
+{
+    View_ID view = get_active_view(app, Access_ReadWriteVisible);
+    Buffer_ID buffer = view_get_buffer(app, view, Access_ReadWriteVisible);
+    i64 pos = view_get_cursor_pos(app, view);
+    i64 line = get_line_number_from_pos(app, buffer, pos);
+    Range_i64 range = get_line_pos_range(app, buffer, line);
+    range.end += 1;
+    i32 size = (i32)buffer_get_size(app, buffer);
+    range.end = clamp_top(range.end, size);
+    if (range_size(range) == 0 ||
+        buffer_get_char(app, buffer, range.end - 1) != '\n'){
+        range.start -= 1;
+        range.first = clamp_bot(0, range.first);
+    }
+    clipboard_post_buffer_range(app, 0, buffer, range);
+    buffer_replace_range(app, buffer, range, string_u8_litexpr(""));
+    cjh_enter_normal_mode(app);
+}
+
 static void cjh_setup_d_mapping(Mapping *mapping, i64 d_cmd_map_id)
 {
     CJH_CMD_MAPPING_PREAMBLE(d_cmd_map_id);
 
     Bind(move_left_token_boundary_d, KeyCode_B);
     Bind(move_left_whitespace_boundary_d, KeyCode_B, KeyCode_Shift);
-    Bind(cjh_delete_line, KeyCode_D);
+    Bind(cjh_cut_line, KeyCode_D);
     Bind(cjh_move_to_end_of_word_d, KeyCode_E);
     Bind(cjh_find_forward_d, KeyCode_F);
     Bind(cjh_find_backward_d, KeyCode_F, KeyCode_Shift);
@@ -1665,6 +1691,7 @@ CUSTOM_COMMAND_SIG(cjh_toggle_upper_lower)
     {
         delete_char(app);
         write_text(app, SCu8(&new_char, 1));
+        move_left(app);
     }
 }
 
@@ -2005,7 +2032,6 @@ static void cjh_setup_normal_mode_mapping(Mapping *mapping, i64 normal_mode_id)
     Bind(cjh_open_newline_above, KeyCode_O, KeyCode_Shift);
     // Bind(AVAILABLE, KeyCode_P, KeyCode_Shift);
     // Bind(AVAILABLE, KeyCode_Q, KeyCode_Shift);
-    // TODO(cjh): Only works once
     Bind(cjh_keyboard_macro_replay, KeyCode_R, KeyCode_Shift);
     // Bind(AVAILABLE, KeyCode_S, KeyCode_Shift);
     Bind(cjh_find_backward_til, KeyCode_T, KeyCode_Shift);
@@ -2055,6 +2081,7 @@ static void cjh_setup_normal_mode_mapping(Mapping *mapping, i64 normal_mode_id)
     Bind(page_down, KeyCode_D, KeyCode_Control);
     Bind(center_view, KeyCode_L, KeyCode_Control);
     Bind(cjh_pop_mark, KeyCode_O, KeyCode_Control);
+    // C-r
     Bind(page_up, KeyCode_U, KeyCode_Control);
     // C-v
     Bind(set_mark, KeyCode_Space, KeyCode_Control);
