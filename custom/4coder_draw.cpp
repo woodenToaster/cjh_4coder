@@ -474,6 +474,10 @@ get_token_color_cpp(Token token){
                 {
                     color = defcolor_include;
                 }break;
+                case TokenCppKind_DeclType:
+                {
+                    color = defcolor_special_character;
+                }break;
             }
         }break;
     }

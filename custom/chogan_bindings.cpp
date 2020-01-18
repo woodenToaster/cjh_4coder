@@ -3,11 +3,15 @@
 // TOP
 
 // TODO(chogan): Missing functionality
-// - s/.../.../g
+// - project wide search
+//   - Scroll results when highlighted line goes off the screen
+// - Auto insert matching {[("'
+// - :s/.../.../g
+// - % to jump to matching {[("'
 // - Layouts
 // - Vim style search in buffer
 // - Jump to panel by number (" w1", " w3", etc.)
-// - Syntax highlighting for type names
+// - Syntax highlighting for variable defs, enums, func decl, args
 // - Keep minibuffer open for displaying messages?
 // - [[ or gp
 // - cjh_fill_paragraph
@@ -197,6 +201,74 @@ static void cjh_update_visual_line_mode_range(Application_Links *app)
     view_set_cursor(app, view, seek_pos(saved_cursor));
 }
 
+static void cjh_paint_tokens(Application_Links *app, Buffer_ID buffer, Text_Layout_ID text_layout_id)
+{
+    Scratch_Block scratch(app);
+    FColor col = {0};
+
+    Token_Array array = get_token_array_from_buffer(app, buffer);
+    if (array.tokens != 0){
+        Range_i64 visible_range = text_layout_get_visible_range(app, text_layout_id);
+        i64 first_index = token_index_from_pos(&array, visible_range.first);
+        Token_Iterator_Array it = token_iterator_index(0, &array, first_index);
+
+        for (;;){
+            Token *token = token_it_read(&it);
+
+            if (token->pos >= visible_range.one_past_last){
+                break;
+            }
+            // TODO(stefan): hack
+            b32 valid = true;
+            if(token->sub_kind == TokenCppKind_Dot){
+                token_it_inc_all(&it);
+                Token *peek = token_it_read(&it);
+                String_Const_u8 token_as_string = push_token_lexeme(app, scratch, buffer, token);
+                if(peek->kind == TokenBaseKind_Identifier &&
+                   peek->sub_kind == TokenCppKind_Identifier){
+                    //token_it_dec_all(&it);
+                    valid = false;
+                }
+            }
+
+            if (token->kind == TokenBaseKind_Identifier &&
+                token->sub_kind == TokenCppKind_Identifier &&
+                valid){
+
+                String_Const_u8 token_as_string = push_token_lexeme(app, scratch, buffer, token);
+
+                for(Buffer_ID buf = get_buffer_next(app, 0, Access_Always);
+                    buf != 0;
+                    buf = get_buffer_next(app, buf, Access_Always))
+                {
+                    Code_Index_File *file = code_index_get_file(buf);
+                    if(file != 0){
+                        for(i32 i = 0; i < file->note_array.count; i += 1){
+                            Code_Index_Note *note = file->note_array.ptrs[i];
+                            //b32 found =false;
+                            switch(note->note_kind){
+                                case CodeIndexNote_Type:{
+                                    if(string_match(note->text, token_as_string, StringMatch_Exact)){
+                                        Range_i64 range = { 0 };
+                                        range.start= token->pos;
+                                        range.end= token->pos+token->size;
+                                        //paint_text_color(app, text_layout_id, range, ARGBFromID(defcolor_keyword));
+                                        paint_text_color_fcolor(app, text_layout_id, range,
+                                                                fcolor_id(defcolor_special_character));
+                                        break;
+                                    }
+                                }break;
+                            }
+                        }
+                    }
+                }
+            }
+            if (!token_it_inc_all(&it)){
+                break;
+            }
+        }
+    }
+}
 // Multi key command hooks
 
 static void cjh_start_recording_command(Application_Links *app)
@@ -1119,15 +1191,48 @@ static void cjh_setup_macro_mapping(Mapping *mapping, i64 macro_cmd_map_id)
         cjh_enter_insert_mode(app);             \
     }
 
+CUSTOM_COMMAND_SIG(cjh_find_forward_c)
+{
+    set_mark(app);
+    cjh_find_forward(app);
+    move_right(app);
+    cut(app);
+    cjh_enter_insert_mode(app);
+}
+
+CUSTOM_COMMAND_SIG(cjh_find_backward_c)
+{
+    set_mark(app);
+    cjh_find_backward(app);
+    move_left(app);
+    cut(app);
+    cjh_enter_insert_mode(app);
+}
+
+CUSTOM_COMMAND_SIG(cjh_find_forward_til_c)
+{
+    set_mark(app);
+    cjh_find_forward_til(app);
+    move_right(app);
+    cut(app);
+    cjh_enter_insert_mode(app);
+}
+
+CUSTOM_COMMAND_SIG(cjh_find_backward_til_c)
+{
+    set_mark(app);
+    cjh_find_backward_til(app);
+    move_left(app);
+    cut(app);
+    cjh_enter_insert_mode(app);
+}
+
 CJH_CHANGE_COMMAND(cjh_move_right_word)
 CJH_CHANGE_COMMAND(move_right_whitespace_boundary)
 CJH_CHANGE_COMMAND(move_left_token_boundary)
 CJH_CHANGE_COMMAND(move_left_whitespace_boundary)
 CJH_CHANGE_COMMAND(cjh_move_to_end_of_word)
-CJH_CHANGE_COMMAND(cjh_find_forward)
-CJH_CHANGE_COMMAND(cjh_find_backward)
-CJH_CHANGE_COMMAND(cjh_find_forward_til)
-CJH_CHANGE_COMMAND(cjh_find_backward_til)
+
 
 static void cjh_setup_c_mapping(Mapping *mapping, i64 c_cmd_map_id)
 {
@@ -1542,6 +1647,7 @@ CUSTOM_COMMAND_SIG(cjh_interactive_search_project_ag)
 
                         view_set_buffer(app, view, new_buffer, 0);
                         view_set_cursor(app, view, seek_line_col(line_number, 0));
+                        cjh_push_mark(app);
                     }
                 }
 

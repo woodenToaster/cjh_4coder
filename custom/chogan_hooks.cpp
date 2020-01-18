@@ -360,7 +360,9 @@ chogan_render_buffer(Application_Links *app, View_ID view_id, Face_ID face_id,
         Color_Array colors = finalize_color_array(defcolor_text_cycle);
         draw_paren_highlight(app, buffer, text_layout_id, cursor_pos, colors.vals, colors.count);
     }
-    
+
+    cjh_paint_tokens(app, buffer, text_layout_id);
+
     // NOTE(allen): Line highlight
     if (global_config.highlight_line_at_cursor && is_active_view && !global_config.highlight_range){
         i64 line_number = get_line_number_from_pos(app, buffer, cursor_pos);
