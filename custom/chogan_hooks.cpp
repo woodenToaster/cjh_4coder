@@ -300,14 +300,6 @@ chogan_render_buffer(Application_Links *app, View_ID view_id, Face_ID face_id,
     if (buffer == search_buffer)
     {
         cjh_draw_search_buffer_token_colors(app, text_layout_id, search_buffer);
-
-        // NOTE(cjh): Highlight line in search buffer
-        if (cjh_search_panel_view_id != 0)
-        {
-            // draw_line_highlight(app, text_layout_id, line_number,
-            //                     fcolor_id(defcolor_highlight_cursor_line));
-        }
-    
     }
     else if (token_array.tokens != 0){
         draw_cpp_token_colors(app, text_layout_id, &token_array);
@@ -316,7 +308,9 @@ chogan_render_buffer(Application_Links *app, View_ID view_id, Face_ID face_id,
         if (global_config.use_comment_keyword){
             Comment_Highlight_Pair pairs[] = {
                 {string_u8_litexpr("NOTE"), finalize_color(defcolor_comment_pop, 0)},
-                {string_u8_litexpr("TODO"), finalize_color(defcolor_comment_pop, 1)}
+                {string_u8_litexpr("TODO"), finalize_color(defcolor_comment_pop, 1)},
+                {string_u8_litexpr("TEMP"), finalize_color(defcolor_comment_pop, 1)},
+                {string_u8_litexpr("IMPORTANT"), finalize_color(defcolor_comment_pop, 1)}
             };
             draw_comment_highlights(app, buffer, text_layout_id,
                                     &token_array, pairs, ArrayCount(pairs));

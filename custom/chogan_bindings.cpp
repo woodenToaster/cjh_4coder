@@ -3,9 +3,6 @@
 // TOP
 
 // TODO(chogan): Missing functionality
-// - project wide search
-//   - Scroll results when highlighted line goes off the screen
-//   - SPC *
 // - Alt-p to populate search bar with search history
 // - Auto insert matching {[("'
 // - :s/.../.../g
@@ -26,7 +23,7 @@
 // TODO(chogan): Bugs
 // - e and b don't work in comments
 // - Show whitespace doesn't work
-// - Visual line mode delete paste only pastes one line
+// - delete paste in visual line mode cuts off an extra character
 // - d w deletes two words
 // - SPC w hl don't work exactly right
 
@@ -349,13 +346,34 @@ static void cjh_draw_search_buffer_token_colors(Application_Links *app, Text_Lay
                                                 Buffer_ID buffer_id)
 {
     Scratch_Block scratch(app);
+
+    u64 num_lines = buffer_get_line_count(app, buffer_id);
+    if (cjh_interactive_search_selected_line > num_lines)
+    {
+        cjh_interactive_search_selected_line = num_lines;
+    }
+
+    Buffer_Seek line_col = seek_line_col(cjh_interactive_search_selected_line, 0);
+    Buffer_Cursor line_cursor = buffer_compute_cursor(app, buffer_id, line_col);
     Range_i64 visible_range = text_layout_get_visible_range(app, text_layout_id);
+    Buffer_Cursor visible_cursor_start = buffer_compute_cursor(app, buffer_id, seek_pos(visible_range.start));
+    Buffer_Cursor visible_cursor_end = buffer_compute_cursor(app, buffer_id, seek_pos(visible_range.end));
+
+    if ((cjh_interactive_search_selected_line > (u64)visible_cursor_end.line - 1) ||
+        (cjh_interactive_search_selected_line < (u64)visible_cursor_start.line))
+    {
+        Buffer_Scroll scroll = view_get_buffer_scroll(app, cjh_search_panel_view_id);
+        scroll.target.line_number = cjh_interactive_search_selected_line;
+        view_set_buffer_scroll(app, cjh_search_panel_view_id, scroll, SetBufferScroll_SnapCursorIntoView);
+        visible_range = text_layout_get_visible_range(app, text_layout_id);
+        visible_cursor_start = buffer_compute_cursor(app, buffer_id, seek_pos(visible_range.start));
+    }
     String_Const_u8 visible_text = push_buffer_range(app, scratch, buffer_id, visible_range);
     List_String_Const_u8 lines = string_split(scratch, visible_text, SCu8("\n").str, 1);
 
     paint_text_color_fcolor(app, text_layout_id, visible_range, fcolor_id(defcolor_text_default));
 
-    u64 line_start_pos = 0;
+    u64 line_start_pos = visible_cursor_start.pos;
     for (Node_String_Const_u8 *node = lines.first;
          node != 0;
          node = node->next)
@@ -385,10 +403,6 @@ static void cjh_draw_search_buffer_token_colors(Application_Links *app, Text_Lay
         paint_text_color_fcolor(app, text_layout_id, buffer_range, fcolor_id(defcolor_keyword));
 
         // NOTE(cjh): Highlight selected line
-        if (cjh_interactive_search_selected_line > lines.node_count)
-        {
-            cjh_interactive_search_selected_line = lines.node_count;
-        }
         draw_line_highlight(app, text_layout_id, cjh_interactive_search_selected_line, fcolor_id(defcolor_highlight));
 
         line_start_pos += node->string.size + 1;
@@ -1449,6 +1463,9 @@ static void cjh_delete_visual_line_mode_range(Application_Links *app)
 {
     View_ID view = get_active_view(app, Access_ReadWrite);
     Buffer_ID buffer = view_get_buffer(app, view, Access_ReadWrite);
+    Range_i64 clip_range = cjh_visual_line_mode_range;
+    clip_range.end++;
+    clipboard_post_buffer_range(app, 0, buffer, clip_range);
     buffer_replace_range(app, buffer, cjh_visual_line_mode_range, string_u8_empty);
 }
 
@@ -1568,7 +1585,7 @@ void cjh_run_ag_async(struct Async_Context *actx, Data data)
                         dir, SCu8(ag.str, ag.size), CLI_OverlapWithConflict | CLI_AlwaysBindToView);
 }
 
-CUSTOM_COMMAND_SIG(cjh_interactive_search_project_ag)
+static void cjh_interactive_search_project_ag_internal(Application_Links *app, String_Const_u8 *query)
 {
     View_ID view = get_this_ctx_view(app, Access_Always);
 
@@ -1600,10 +1617,20 @@ CUSTOM_COMMAND_SIG(cjh_interactive_search_project_ag)
     String_u8 ag = Su8((u8 *)ag_cmd, ag_cmd_size, 256);
     u8 bar_string_space[256];
     bar.string = SCu8(bar_string_space, (u64)0);
+    if (query)
+    {
+        string_append(&ag, *query);
+        String_u8 bar_string = Su8(bar.string, sizeof(bar_string_space));
+        string_append(&bar_string, *query);
+        bar.string = bar_string.string;
+        memcpy(cjh_interactive_search_string, bar.string.str, bar.string.size);
+        cjh_interactive_search_string[bar.string.size + 1] = 0;
+    }
 
     String_Const_u8 proj_search_str = string_u8_litexpr("Project Search: ");
     bar.prompt = proj_search_str;
     Buffer_Identifier search_identifier = buffer_identifier(string_u8_litexpr("*search*"));
+    Buffer_ID search_buffer = buffer_identifier_to_id(app, search_identifier);
 
     User_Input in = {};
     bool done = false;
@@ -1611,21 +1638,28 @@ CUSTOM_COMMAND_SIG(cjh_interactive_search_project_ag)
 
     for (;!done;)
     {
-        in = get_next_input(app, EventPropertyGroup_AnyKeyboardEvent,
-                            EventProperty_Escape|EventProperty_ViewActivation);
+        b32 string_change = false;
+        if (query)
+        {
+            string_change = true;
+        }
+        else
+        {
+            in = get_next_input(app, EventPropertyGroup_AnyKeyboardEvent,
+                                EventProperty_Escape|EventProperty_ViewActivation);
+        }
+
         if (in.abort)
         {
             break;
         }
 
         String_Const_u8 string = to_writable(&in);
-        b32 string_change = false;
         b32 backspace = false;
 
         if (match_key_code(&in, KeyCode_Return))
         {
             Scratch_Block scratch(app);
-            Buffer_ID search_buffer = buffer_identifier_to_id(app, search_identifier);
             String_Const_u8 text = push_buffer_range(app, scratch, search_buffer, buffer_range(app, search_buffer));
             List_String_Const_u8 lines = string_split(scratch, text, SCu8("\n").str, 1);
             u64 line = 1;
@@ -1680,6 +1714,8 @@ CUSTOM_COMMAND_SIG(cjh_interactive_search_project_ag)
         }
         else if (match_key_code(&in, KeyCode_J) && has_modifier(&in.event.key.modifiers, KeyCode_Control))
         {
+            // NOTE(cjh): Watch out for threading bugs since this is updated
+            // here and in the render loop
             cjh_interactive_search_selected_line++;
         }
         else if (match_key_code(&in, KeyCode_K) && has_modifier(&in.event.key.modifiers, KeyCode_Control))
@@ -1701,9 +1737,16 @@ CUSTOM_COMMAND_SIG(cjh_interactive_search_project_ag)
         }
         else
         {
-            // NOTE(cjh): This will allow the same input event to be triggered
-            // again, except the next time it will be a TextInsert event.
-            leave_current_input_unhandled(app);
+            if (query)
+            {
+                query = 0;
+            }
+            else
+            {
+                // NOTE(cjh): This will allow the same input event to be triggered
+                // again, except the next time it will be a TextInsert event.
+                leave_current_input_unhandled(app);
+            }
         }
 
         if (string_change)
@@ -1745,6 +1788,22 @@ CUSTOM_COMMAND_SIG(cjh_interactive_search_project_ag)
     cjh_enter_normal_mode(app);
 }
 
+CUSTOM_COMMAND_SIG(cjh_interactive_search_project_identifier_ag)
+{
+    View_ID view = get_active_view(app, Access_ReadVisible);
+    Buffer_ID buffer_id = view_get_buffer(app, view, Access_ReadVisible);
+    i64 pos = view_get_cursor_pos(app, view);
+    Scratch_Block scratch(app);
+    Range_i64 range = enclose_pos_alpha_numeric_underscore(app, buffer_id, pos);
+    String_Const_u8 query = push_buffer_range(app, scratch, buffer_id, range);
+    cjh_interactive_search_project_ag_internal(app, &query);
+}
+
+CUSTOM_COMMAND_SIG(cjh_interactive_search_project_ag)
+{
+    cjh_interactive_search_project_ag_internal(app, 0);
+}
+
 static void cjh_setup_space_mapping(Mapping *mapping, i64 space_cmd_map_id)
 {
     CJH_CMD_MAPPING_PREAMBLE(space_cmd_map_id);
@@ -1781,6 +1840,7 @@ static void cjh_setup_space_mapping(Mapping *mapping, i64 space_cmd_map_id)
     // Bind(cjh_toggle_previous_buffer, KeyCode_Tab);
     Bind(cjh_insert_newline_above, KeyCode_LeftBracket);
     Bind(cjh_insert_newline_below, KeyCode_RightBracket);
+    Bind(cjh_interactive_search_project_identifier_ag, KeyCode_8, KeyCode_Shift);
 }
 
 CUSTOM_COMMAND_SIG(cjh_eol_insert)
