@@ -5,6 +5,7 @@
 // TODO(chogan): Missing functionality
 // - project wide search
 //   - Scroll results when highlighted line goes off the screen
+// - Alt-p to populate search bar with search history
 // - Auto insert matching {[("'
 // - :s/.../.../g
 // - % to jump to matching {[("'
@@ -21,6 +22,8 @@
 // TODO(chogan): Bugs
 // - 'e' doesn't work in comments
 // - Show whitespace doesn't work
+// - Visual line mode delete paste only pastes one line
+// - d w deletes two words
 
 #if !defined(FCODER_CHOGAN_BINDINGS_CPP)
 #define FCODER_CHOGAN_BINDINGS_CPP
@@ -1769,7 +1772,6 @@ static void cjh_setup_space_mapping(Mapping *mapping, i64 space_cmd_map_id)
     // " y"
     // " z"
     Bind(cjh_command_lister, KeyCode_Space);
-    // Bind(cjh_list_all_locations, KeyCode_ForwardSlash);
     Bind(cjh_interactive_search_project_ag, KeyCode_ForwardSlash);
     // Bind(cjh_toggle_previous_buffer, KeyCode_Tab);
     Bind(cjh_insert_newline_above, KeyCode_LeftBracket);
@@ -1809,6 +1811,7 @@ CUSTOM_COMMAND_SIG(cjh_open_newline_below)
 {
     seek_end_of_line(app);
     write_text(app, SCu8("\n"));
+    auto_indent_line_at_cursor(app);
     cjh_enter_insert_mode(app);
 }
 
@@ -1817,6 +1820,7 @@ CUSTOM_COMMAND_SIG(cjh_open_newline_above)
     seek_beginning_of_line(app);
     write_text(app, SCu8("\n"));
     move_up(app);
+    auto_indent_line_at_cursor(app);
     cjh_enter_insert_mode(app);
 }
 
@@ -1835,6 +1839,7 @@ CUSTOM_COMMAND_SIG(cjh_replace_char)
     {
         delete_char(app);
         write_text_input(app);
+        move_left(app);
     }
 }
 
@@ -1892,7 +1897,6 @@ CUSTOM_COMMAND_SIG(cjh_repeat_last_command)
     print_message(app, macro);
 #endif
 }
-
 static void cjh_isearch(Application_Links *app, Scan_Direction start_scan, i64 first_pos,
                         String_Const_u8 query_init, bool case_sensitive=false)
 {
@@ -1965,6 +1969,7 @@ static void cjh_isearch(Application_Links *app, Scan_Direction start_scan, i64 f
                 size = clamp_top(size, sizeof(previous_isearch_query) - 1);
                 block_copy(previous_isearch_query, bar.string.str, size);
                 previous_isearch_query[size] = 0;
+                center_view(app);
                 break;
             }
         }
@@ -2184,14 +2189,14 @@ static void cjh_setup_normal_mode_mapping(Mapping *mapping, i64 normal_mode_id)
     Bind(paste, KeyCode_P);
     // Bind(cjh_quit_isearch_highlight, KeyCode_Q);
     Bind(cjh_replace_char, KeyCode_R);
-    // Bind(kmacro_start_macro_or_insert_counter, KeyCode_S);
+    // Bind(AVAILABLE, KeyCode_S);
     Bind(cjh_find_forward_til, KeyCode_T);
     Bind(undo, KeyCode_U);
     Bind(cjh_start_multi_key_cmd_visual_mode, KeyCode_V);
     Bind(cjh_move_right_word, KeyCode_W);
     Bind(delete_char, KeyCode_X);
     Bind(cjh_start_multi_key_cmd_y, KeyCode_Y);
-    // Bind( , KeyCode_Z);
+    // Bind(AVAILABLE, KeyCode_Z);
 
     Bind(cjh_start_multi_key_cmd_space, KeyCode_Space);
     Bind(cjh_start_multi_key_cmd_comma, KeyCode_Comma);
@@ -2209,7 +2214,7 @@ static void cjh_setup_normal_mode_mapping(Mapping *mapping, i64 normal_mode_id)
     // Bind(AVAILABLE, KeyCode_H, KeyCode_Shift);
     Bind(cjh_insert_beginning_of_line, KeyCode_I, KeyCode_Shift);
     // Bind(cjh_delete_indentation, KeyCode_J, KeyCode_Shift);
-    // Bind(kmacro-end-or-call-macro, KeyCode_K, KeyCode_Shift);
+    // Bind(AVAILABLE, KeyCode_K, KeyCode_Shift);
     // Bind(AVAILABLE, KeyCode_L, KeyCode_Shift);
     // Bind(move_to_window_line_top_bottom, KeyCode_M, KeyCode_Shift);
     Bind(goto_prev_jump, KeyCode_N, KeyCode_Shift);
@@ -2265,7 +2270,7 @@ static void cjh_setup_normal_mode_mapping(Mapping *mapping, i64 normal_mode_id)
     Bind(page_down, KeyCode_D, KeyCode_Control);
     Bind(center_view, KeyCode_L, KeyCode_Control);
     Bind(cjh_pop_mark, KeyCode_O, KeyCode_Control);
-    // C-r
+    // Bind(redo, KeyCode_R, KeyCode_Control);
     Bind(page_up, KeyCode_U, KeyCode_Control);
     // C-v
     Bind(set_mark, KeyCode_Space, KeyCode_Control);

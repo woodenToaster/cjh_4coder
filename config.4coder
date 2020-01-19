@@ -45,7 +45,7 @@ indent_with_tabs = false;
 indent_width = 4;
 
 // Theme
-default_theme_name = "theme-spacemacs";
+default_theme_name = "theme-cjh";
 highlight_line_at_cursor = true;
 highlight_range = false;
 
