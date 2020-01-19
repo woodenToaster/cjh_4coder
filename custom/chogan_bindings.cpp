@@ -5,6 +5,7 @@
 // TODO(chogan): Missing functionality
 // - project wide search
 //   - Scroll results when highlighted line goes off the screen
+//   - SPC *
 // - Alt-p to populate search bar with search history
 // - Auto insert matching {[("'
 // - :s/.../.../g
@@ -14,16 +15,20 @@
 // - Jump to panel by number (" w1", " w3", etc.)
 // - Syntax highlighting for variable defs, enums, func decl, args
 // - Keep minibuffer open for displaying messages?
-// - [[ or gp
+// - [[ or gp (use code index)
 // - cjh_fill_paragraph
 // - Use draw_line_highlight for visual line mode
 // - Cut cursor in half during multi key command
+// - remove fd from undo buffer
+// - comment face for #if 0 blocks
+// - bold keywords and preproc
 
 // TODO(chogan): Bugs
-// - 'e' doesn't work in comments
+// - e and b don't work in comments
 // - Show whitespace doesn't work
 // - Visual line mode delete paste only pastes one line
 // - d w deletes two words
+// - SPC w hl don't work exactly right
 
 #if !defined(FCODER_CHOGAN_BINDINGS_CPP)
 #define FCODER_CHOGAN_BINDINGS_CPP
@@ -2154,6 +2159,7 @@ CUSTOM_COMMAND_SIG(cjh_search_identifier_backward)
 }
 
 CJH_COMMAND_AND_ENTER_NORMAL_MODE(keyboard_macro_replay)
+CJH_COMMAND_AND_ENTER_NORMAL_MODE(query_replace)
 CJH_CMD_AND_PUSH_MARK(move_up_to_blank_line)
 CJH_CMD_AND_PUSH_MARK(move_down_to_blank_line)
 
@@ -2187,7 +2193,7 @@ static void cjh_setup_normal_mode_mapping(Mapping *mapping, i64 normal_mode_id)
     Bind(goto_next_jump, KeyCode_N);
     Bind(cjh_open_newline_below, KeyCode_O);
     Bind(paste, KeyCode_P);
-    // Bind(cjh_quit_isearch_highlight, KeyCode_Q);
+    Bind(cjh_query_replace, KeyCode_Q);
     Bind(cjh_replace_char, KeyCode_R);
     // Bind(AVAILABLE, KeyCode_S);
     Bind(cjh_find_forward_til, KeyCode_T);
