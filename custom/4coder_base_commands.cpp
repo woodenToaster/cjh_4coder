@@ -61,6 +61,42 @@ CUSTOM_DOC("Inserts whatever text was used to trigger this command.")
 {
     User_Input in = get_current_input(app);
     String_Const_u8 insert = to_writable(&in);
+
+    switch (insert.str[0])
+    {
+        case '{':
+        {
+            write_text(app, insert);
+            // auto_indent_line_at_cursor(app);
+            // write_text(app, string_u8_litexpr("\n\n"));
+            // write_text(app, string_u8_litexpr("}"));
+            // auto_indent_line_at_cursor(app);
+            // move_up(app);
+            // auto_indent_line_at_cursor(app);
+            // insert.str[0] = '\0';
+            insert.str[0] = '}';
+        } break;
+        case '(':
+        {
+            write_text(app, insert);
+            insert.str[0] = ')';
+        } break;
+        case '[':
+        {
+            write_text(app, insert);
+            insert.str[0] = ']';
+        } break;
+        case '"':
+        {
+            write_text(app, insert);
+            insert.str[0] = '"';
+        } break;
+        case '\'':
+        {
+            write_text(app, insert);
+            insert.str[0] = '\'';
+        } break;
+    }
     write_text(app, insert);
 }
 

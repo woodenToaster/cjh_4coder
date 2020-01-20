@@ -3,22 +3,29 @@
 // TOP
 
 // TODO(chogan): Missing functionality
-// - Alt-p to populate search bar with search history
-// - Auto insert matching {[("'
-// - :s/.../.../g
-// - % to jump to matching {[("'
 // - Layouts
+// - format {} on insert
+// - [[ or gp (use code index)
+// - (ydc) i (w(["'a)
+// - surround with ("[{' (enclose_pos)
+// - cjh_fill_paragraph
+// - delete trailing whitespace
+// - snippet case
+
+// TODO(chogan): Enhancements
+// - Highlight match/replacement in visual_line_mode_replace_in_range
+// - Alt-p to populate search bar with search history
 // - Vim style search in buffer
 // - Jump to panel by number (" w1", " w3", etc.)
 // - Syntax highlighting for variable defs, enums, func decl, args
 // - Keep minibuffer open for displaying messages?
-// - [[ or gp (use code index)
-// - cjh_fill_paragraph
 // - Use draw_line_highlight for visual line mode
 // - Cut cursor in half during multi key command
 // - remove fd from undo buffer
 // - comment face for #if 0 blocks
 // - bold keywords and preproc
+// - g d on variables
+// - % to jump to matching ["'
 
 // TODO(chogan): Bugs
 // - e and b don't work in comments
@@ -1346,13 +1353,49 @@ CUSTOM_COMMAND_SIG(cjh_goto_next_function)
     cjh_enter_normal_mode(app);
 }
 
+CUSTOM_COMMAND_SIG(cjh_goto_definition)
+{
+    Scratch_Block scratch(app);
+    View_ID view = get_this_ctx_view(app, Access_Always);
+    Buffer_ID buffer_id = view_get_buffer(app, view, Access_ReadVisible);
+    i64 pos = view_get_cursor_pos(app, view);
+    Range_i64 range = enclose_pos_alpha_numeric_underscore(app, buffer_id, pos);
+    String_Const_u8 query = push_buffer_range(app, scratch, buffer_id, range);
+    Tiny_Jump result = {};
+
+    code_index_lock();
+    for (Buffer_ID buffer = get_buffer_next(app, 0, Access_Always);
+         buffer != 0;
+         buffer = get_buffer_next(app, buffer, Access_Always))
+    {
+        Code_Index_File *file = code_index_get_file(buffer);
+        if (file != 0)
+        {
+            for (i32 i = 0; i < file->note_array.count; i += 1)
+            {
+                Code_Index_Note *note = file->note_array.ptrs[i];
+                if (string_match(query, note->text))
+                {
+                    result.buffer = buffer;
+                    result.pos = note->pos.first;
+                }
+            }
+        }
+    }
+    code_index_unlock();
+
+    if (result.buffer != 0){
+        jump_to_location(app, view, result.buffer, result.pos);
+    }
+    cjh_enter_normal_mode(app);
+}
+
 static void cjh_setup_g_mapping(Mapping *mapping, i64 g_cmd_map_id)
 {
     CJH_CMD_MAPPING_PREAMBLE(g_cmd_map_id);
 
     Bind(cjh_comment_line_toggle, KeyCode_C);
-    // TODO(cjh): This doesn't really work
-    Bind(cjh_list_all_locations_of_type_definition_of_identifier, KeyCode_D);
+    Bind(cjh_goto_definition, KeyCode_D);
     // Bind(backward-to-word, KeyCode_E);
     Bind(cjh_open_file_in_quotes, KeyCode_F);
     Bind(cjh_goto_beginning_of_file, KeyCode_G);
@@ -1489,6 +1532,29 @@ CUSTOM_COMMAND_SIG(cjh_visual_line_mode_yank)
     cjh_enter_normal_mode(app);
 }
 
+
+CUSTOM_COMMAND_SIG(cjh_visual_line_mode_replace_in_range)
+{
+    View_ID view = get_active_view(app, Access_ReadWriteVisible);
+    Buffer_ID buffer = view_get_buffer(app, view, Access_ReadWriteVisible);
+    replace_in_range_query_user(app, buffer, cjh_visual_line_mode_range);
+    cjh_enter_normal_mode(app);
+}
+
+CUSTOM_COMMAND_SIG(cjh_visual_line_mode_comment_range)
+{
+    View_ID view = get_active_view(app, Access_ReadVisible);
+    Buffer_ID buffer = view_get_buffer(app, view, Access_ReadVisible);
+    Buffer_Cursor cursor_start = buffer_compute_cursor(app, buffer, seek_pos(cjh_visual_line_mode_range.start));
+    Buffer_Cursor cursor_end = buffer_compute_cursor(app, buffer, seek_pos(cjh_visual_line_mode_range.end));
+
+    for (i64 line = cursor_start.line; line <= cursor_end.line; ++line)
+    {
+        view_set_cursor(app, view, seek_line_col(line, 0));
+        comment_line_toggle(app);
+    }
+}
+
 static void cjh_setup_visual_line_mode_mapping(Mapping *mapping, i64 visual_line_mode_cmd_map_id)
 {
     CJH_CMD_MAPPING_PREAMBLE(visual_line_mode_cmd_map_id);
@@ -1510,7 +1576,9 @@ static void cjh_setup_visual_line_mode_mapping(Mapping *mapping, i64 visual_line
     // Commands
     Bind(cjh_visual_line_mode_change, KeyCode_C);
     Bind(cjh_visual_line_mode_delete, KeyCode_D);
+    Bind(cjh_visual_line_mode_replace_in_range, KeyCode_R);
     Bind(cjh_visual_line_mode_yank, KeyCode_Y);
+    Bind(cjh_visual_line_mode_comment_range, KeyCode_ForwardSlash);
 }
 
 // Visual Mode Commands
@@ -2218,6 +2286,75 @@ CUSTOM_COMMAND_SIG(cjh_search_identifier_backward)
     cjh_isearch_identifier(app, Scan_Backward);
 }
 
+CUSTOM_COMMAND_SIG(cjh_goto_matching_paren)
+{
+    View_ID view = get_active_view(app, Access_ReadVisible);
+    Buffer_ID buffer = view_get_buffer(app, view, Access_ReadVisible);
+    i64 pos = view_get_cursor_pos(app, view);
+    char query = buffer_get_char(app, buffer, pos);
+
+    Range_i64 nest_range = {};
+
+    switch (query)
+    {
+        case '(':
+        {
+            if (find_surrounding_nest(app, buffer, pos + 1, FindNest_Paren, &nest_range))
+            {
+                view_set_cursor(app, view, seek_pos(nest_range.end - 1));
+            }
+        } break;
+        case ')':
+        {
+            if (find_surrounding_nest(app, buffer, pos, FindNest_Paren, &nest_range))
+            {
+                view_set_cursor(app, view, seek_pos(nest_range.start));
+            }
+        } break;
+        case '[':
+        {
+            // TODO(cjh):
+        } break;
+        case ']':
+        {
+            // TODO(cjh):
+        } break;
+        case '{':
+        {
+            if (find_surrounding_nest(app, buffer, pos + 1, FindNest_Scope, &nest_range))
+            {
+                view_set_cursor(app, view, seek_pos(nest_range.end - 1));
+            }
+        } break;
+        case '}':
+        {
+            if (find_surrounding_nest(app, buffer, pos, FindNest_Scope, &nest_range))
+            {
+                view_set_cursor(app, view, seek_pos(nest_range.start));
+            }
+        } break;
+        case '"':
+        {
+            // TODO(cjh): How do we know if we're on the opening or closing quote?
+            // Range_i64 range = enclose_pos_inside_quotes(app, buffer, pos);
+            // if (pos == range.start - 1)
+            // {
+            //     view_set_cursor(app, view, seek_pos(range.end + 1));
+            // }
+            // else if (pos == range.end + 1)
+            // {
+            //     view_set_cursor(app, view, seek_pos(range.start - 1));
+            // }
+        } break;
+        case '\'':
+        {
+            // TODO(cjh):
+        } break;
+        default:
+            break;
+    }
+}
+
 CJH_COMMAND_AND_ENTER_NORMAL_MODE(keyboard_macro_replay)
 CJH_COMMAND_AND_ENTER_NORMAL_MODE(query_replace)
 CJH_CMD_AND_PUSH_MARK(move_up_to_blank_line)
@@ -2266,7 +2403,7 @@ static void cjh_setup_normal_mode_mapping(Mapping *mapping, i64 normal_mode_id)
 
     Bind(cjh_start_multi_key_cmd_space, KeyCode_Space);
     Bind(cjh_start_multi_key_cmd_comma, KeyCode_Comma);
-    Bind(word_complete, KeyCode_Tab);
+    Bind(auto_indent_line_at_cursor, KeyCode_Tab);
     // Indent (formatted)
 
     // A-Z
@@ -2307,7 +2444,7 @@ static void cjh_setup_normal_mode_mapping(Mapping *mapping, i64 normal_mode_id)
     // @
     Bind(cjh_search_identifier_backward, KeyCode_3, KeyCode_Shift);
     Bind(seek_end_of_line, KeyCode_4, KeyCode_Shift);
-    // Bind(cjh_matching_paren, KeyCode_5, KeyCode_Shift);
+    Bind(cjh_goto_matching_paren, KeyCode_5, KeyCode_Shift);
     Bind(cjh_back_to_indentation, KeyCode_6, KeyCode_Shift);
     // &
     Bind(cjh_search_identifier_forward, KeyCode_8, KeyCode_Shift);
@@ -2336,7 +2473,7 @@ static void cjh_setup_normal_mode_mapping(Mapping *mapping, i64 normal_mode_id)
     Bind(page_down, KeyCode_D, KeyCode_Control);
     Bind(center_view, KeyCode_L, KeyCode_Control);
     Bind(cjh_pop_mark, KeyCode_O, KeyCode_Control);
-    // Bind(redo, KeyCode_R, KeyCode_Control);
+    Bind(redo, KeyCode_R, KeyCode_Control);
     Bind(page_up, KeyCode_U, KeyCode_Control);
     // C-v
     Bind(set_mark, KeyCode_Space, KeyCode_Control);
@@ -2345,7 +2482,6 @@ static void cjh_setup_normal_mode_mapping(Mapping *mapping, i64 normal_mode_id)
     // Alt modifier
     // M-q fill-paragraph
 
-    // TODO(chogan): Surround with ("[{'
 }
 
 static void cjh_setup_insert_mode_mapping(Mapping *mapping, i64 global_id, i64 file_id, i64 code_id){

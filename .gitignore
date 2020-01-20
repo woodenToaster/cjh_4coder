@@ -3,4 +3,8 @@
 *.txt
 *.pdb
 
+GPATH
+GRTAGS
+GTAGS
+
 .vs/

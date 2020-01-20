@@ -267,7 +267,7 @@ union: "union" <identifier> $(";" | "{")
 enum: "enum" <identifier> $(";" | "{")
 typedef: "typedef" [* - (<identifier> (";" | "("))] <identifier> $(";" | "(")
 function: <identifier> >"(" [* - ("(" | ")" | "{" | "}" | ";")] ")" ("{" | ";")
-
+'
 #endif
 
 ////////////////////////////////
