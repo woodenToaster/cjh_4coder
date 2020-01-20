@@ -10,6 +10,7 @@
 // - surround with ("[{' (enclose_pos)
 // - cjh_fill_paragraph
 // - delete trailing whitespace
+// - push mark to register
 
 // TODO(chogan): Enhancements
 // - Alt-p to populate search bar with search history
@@ -21,6 +22,7 @@
 // - % to jump to matching ["'
 
 // TODO(chogan): Theme
+// - Highlight macros
 // - Highlight match/replacement in visual_line_mode_replace_in_range
 // - Syntax highlighting for variable defs, enums, func decl, args
 // - Use draw_line_highlight for visual line mode
@@ -252,7 +254,8 @@ static void cjh_paint_tokens(Application_Links *app, Buffer_ID buffer, Text_Layo
 
             if (token->kind == TokenBaseKind_Identifier &&
                 token->sub_kind == TokenCppKind_Identifier &&
-                valid){
+                valid)
+            {
 
                 String_Const_u8 token_as_string = push_token_lexeme(app, scratch, buffer, token);
 
@@ -261,7 +264,8 @@ static void cjh_paint_tokens(Application_Links *app, Buffer_ID buffer, Text_Layo
                     buf = get_buffer_next(app, buf, Access_Always))
                 {
                     Code_Index_File *file = code_index_get_file(buf);
-                    if(file != 0){
+                    if(file != 0)
+                    {
                         for(i32 i = 0; i < file->note_array.count; i += 1){
                             Code_Index_Note *note = file->note_array.ptrs[i];
                             //b32 found =false;
@@ -271,12 +275,23 @@ static void cjh_paint_tokens(Application_Links *app, Buffer_ID buffer, Text_Layo
                                         Range_i64 range = { 0 };
                                         range.start= token->pos;
                                         range.end= token->pos+token->size;
-                                        //paint_text_color(app, text_layout_id, range, ARGBFromID(defcolor_keyword));
                                         paint_text_color_fcolor(app, text_layout_id, range,
                                                                 fcolor_id(defcolor_special_character));
                                         break;
                                     }
-                                }break;
+                                } break;
+                                case CodeIndexNote_Macro:
+                                {
+                                    if(string_match(note->text, token_as_string, StringMatch_Exact))
+                                    {
+                                        Range_i64 range = {};
+                                        range.start= token->pos;
+                                        range.end= token->pos + token->size;
+                                        paint_text_color_fcolor(app, text_layout_id, range,
+                                                                fcolor_id(defcolor_preproc));
+                                        break;
+                                    }
+                                } break;
                             }
                         }
                     }
@@ -1092,9 +1107,9 @@ static void cjh_setup_toggle_mapping(Mapping *mapping, i64 toggle_cmd_map_id)
 // Comma commands
 CJH_COMMAND_AND_ENTER_NORMAL_MODE(save)
 CJH_COMMAND_AND_ENTER_NORMAL_MODE(open_matching_file_cpp)
+CJH_COMMAND_AND_ENTER_NORMAL_MODE(build_in_build_panel)
 CJH_COMMAND_AND_ENTER_INSERT_MODE(write_note)
 CJH_COMMAND_AND_ENTER_INSERT_MODE(write_todo)
-CJH_COMMAND_AND_ENTER_INSERT_MODE(build_in_build_panel)
 
 CUSTOM_COMMAND_SIG(cjh_build_in_opposite_panel)
 {
