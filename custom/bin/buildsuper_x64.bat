@@ -46,7 +46,7 @@ call cl %opts% %meta_opts% %target%
 call cl %opts% "%custom_root%\4coder_metadata_generator.cpp" /Femetadata_generator
 metadata_generator -R "%custom_root%" "%cd%\%preproc_file%"
 
-call cl %opts% %target% /Fecustom_4coder %build_dll%
+call cl %opts% %target% /Fe%custom_root%\..\custom_4coder %build_dll%
 
 REM file spammation preventation
 del metadata_generator*

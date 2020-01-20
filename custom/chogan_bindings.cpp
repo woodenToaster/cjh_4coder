@@ -3,7 +3,6 @@
 // TOP
 
 // TODO(chogan): Missing functionality
-// - Build panel in opposite panel
 // - Layouts
 // - format {} on insert
 // - [[ or gp (use code index)
@@ -11,30 +10,36 @@
 // - surround with ("[{' (enclose_pos)
 // - cjh_fill_paragraph
 // - delete trailing whitespace
-// - snippet case
 
 // TODO(chogan): Enhancements
-// - Highlight match/replacement in visual_line_mode_replace_in_range
 // - Alt-p to populate search bar with search history
 // - Vim style search in buffer
 // - Jump to panel by number (" w1", " w3", etc.)
-// - Syntax highlighting for variable defs, enums, func decl, args
 // - Keep minibuffer open for displaying messages?
-// - Use draw_line_highlight for visual line mode
-// - Cut cursor in half during multi key command
 // - remove fd from undo buffer
-// - comment face for #if 0 blocks
-// - bold keywords and preproc
 // - g d on variables
 // - % to jump to matching ["'
+
+// TODO(chogan): Theme
+// - Highlight match/replacement in visual_line_mode_replace_in_range
+// - Syntax highlighting for variable defs, enums, func decl, args
+// - Use draw_line_highlight for visual line mode
+// - Cut cursor in half during multi key command
+// - comment face for #if 0 blocks
+// - bold keywords and preproc
 // - Color filenames and line numbers in compilation buffer
+// - Change matching paren colors to new theme
 
 // TODO(chogan): Bugs
+// - 'a' should never go to the next line
+// - Cursor goes in between auto inserted ()
+// - Cursor should not move after paste
 // - e and b don't work in comments
 // - Show whitespace doesn't work
 // - delete paste in visual line mode cuts off an extra character
 // - d w deletes two words
 // - SPC w hl don't work exactly right
+// - Visual mode highlights regions in both visible buffers
 
 #if !defined(FCODER_CHOGAN_BINDINGS_CPP)
 #define FCODER_CHOGAN_BINDINGS_CPP
@@ -1085,16 +1090,32 @@ static void cjh_setup_toggle_mapping(Mapping *mapping, i64 toggle_cmd_map_id)
 }
 
 // Comma commands
-CJH_COMMAND_AND_ENTER_NORMAL_MODE(build_in_build_panel)
 CJH_COMMAND_AND_ENTER_NORMAL_MODE(save)
 CJH_COMMAND_AND_ENTER_NORMAL_MODE(open_matching_file_cpp)
 CJH_COMMAND_AND_ENTER_INSERT_MODE(write_note)
 CJH_COMMAND_AND_ENTER_INSERT_MODE(write_todo)
+CJH_COMMAND_AND_ENTER_INSERT_MODE(build_in_build_panel)
+
+CUSTOM_COMMAND_SIG(cjh_build_in_opposite_panel)
+{
+    View_ID view = get_active_view(app, Access_Always);
+    Buffer_ID buffer = view_get_buffer(app, view, Access_Always);
+
+    View_ID opposite_view = get_next_view_looped_primary_panels(app, view, Access_Always);
+
+    standard_search_and_build(app, opposite_view, buffer);
+    set_fancy_compilation_buffer_font(app);
+
+    block_zero_struct(&prev_location);
+    lock_jump_buffer(app, string_u8_litexpr("*compilation*"));
+    cjh_enter_normal_mode(app);
+}
 
 static void cjh_setup_comma_mapping(Mapping *mapping, i64 comma_cmd_map_id)
 {
     CJH_CMD_MAPPING_PREAMBLE(comma_cmd_map_id);
 
+    // TODO(cjh): Do I like this or opposite panel better?
     Bind(cjh_build_in_build_panel, KeyCode_B);
     // Bind(); ",f" 'fill-paragraph)
     // Bind(); ",gb" 'c-beginning-of-defun)
@@ -1103,7 +1124,6 @@ static void cjh_setup_comma_mapping(Mapping *mapping, i64 comma_cmd_map_id)
     // Bind(); ",mf" 'mark-defun)
     Bind(cjh_write_note, KeyCode_N);
     // Bind(); r" 'recompile)
-    // Bind(); ",si" 'cjh-wrap-region-in-if)
     Bind(cjh_write_todo, KeyCode_T);
     Bind(cjh_save, KeyCode_W);
 }
@@ -1142,6 +1162,7 @@ CJH_DEFINE_INSERT_SNIPPET_FUNC(if)
 CJH_DEFINE_INSERT_SNIPPET_FUNC(for)
 CJH_DEFINE_INSERT_SNIPPET_FUNC(case)
 CJH_DEFINE_INSERT_SNIPPET_FUNC(struct)
+CJH_DEFINE_INSERT_SNIPPET_FUNC(4command)
 
 static bool cjh_inserting_begin_if0_comment = true;
 
@@ -1169,6 +1190,7 @@ static void cjh_setup_snippet_mapping(Mapping *mapping, i64 snippet_cmd_map_id)
     Bind(cjh_snippet_lister, KeyCode_L);
     Bind(cjh_insert_snippet_struct, KeyCode_S);
     Bind(cjh_insert_snippet_if0, KeyCode_0);
+    Bind(cjh_insert_snippet_4command, KeyCode_4);
 }
 
 // Macro commands
@@ -1579,6 +1601,7 @@ static void cjh_setup_visual_line_mode_mapping(Mapping *mapping, i64 visual_line
     Bind(cjh_visual_line_mode_change, KeyCode_C);
     Bind(cjh_visual_line_mode_delete, KeyCode_D);
     Bind(cjh_visual_line_mode_replace_in_range, KeyCode_R);
+    // Bind(); "si" 'cjh-wrap-region-in-if)
     Bind(cjh_visual_line_mode_yank, KeyCode_Y);
     Bind(cjh_visual_line_mode_comment_range, KeyCode_ForwardSlash);
 }
