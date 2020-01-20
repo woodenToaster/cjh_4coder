@@ -22,7 +22,6 @@
 // - % to jump to matching ["'
 
 // TODO(chogan): Theme
-// - Highlight macros
 // - Highlight match/replacement in visual_line_mode_replace_in_range
 // - Syntax highlighting for variable defs, enums, func decl, args
 // - Use draw_line_highlight for visual line mode
@@ -33,6 +32,7 @@
 // - Change matching paren colors to new theme
 
 // TODO(chogan): Bugs
+// - Why does it always prompt for save on quit?
 // - 'a' should never go to the next line
 // - Cursor goes in between auto inserted ()
 // - Cursor should not move after paste
@@ -225,7 +225,7 @@ static void cjh_update_visual_line_mode_range(Application_Links *app)
 static void cjh_paint_tokens(Application_Links *app, Buffer_ID buffer, Text_Layout_ID text_layout_id)
 {
     Scratch_Block scratch(app);
-    FColor col = {0};
+    FColor col = {};
 
     Token_Array array = get_token_array_from_buffer(app, buffer);
     if (array.tokens != 0){
@@ -233,10 +233,12 @@ static void cjh_paint_tokens(Application_Links *app, Buffer_ID buffer, Text_Layo
         i64 first_index = token_index_from_pos(&array, visible_range.first);
         Token_Iterator_Array it = token_iterator_index(0, &array, first_index);
 
-        for (;;){
+        for (;;)
+        {
             Token *token = token_it_read(&it);
 
-            if (token->pos >= visible_range.one_past_last){
+            if (token->pos >= visible_range.one_past_last)
+            {
                 break;
             }
             // TODO(stefan): hack
@@ -289,6 +291,18 @@ static void cjh_paint_tokens(Application_Links *app, Buffer_ID buffer, Text_Layo
                                         range.end= token->pos + token->size;
                                         paint_text_color_fcolor(app, text_layout_id, range,
                                                                 fcolor_id(defcolor_preproc));
+                                        break;
+                                    }
+                                } break;
+                                case CodeIndexNote_Function:
+                                {
+                                    if(string_match(note->text, token_as_string, StringMatch_Exact))
+                                    {
+                                        Range_i64 range = {};
+                                        range.start= token->pos;
+                                        range.end= token->pos + token->size;
+                                        paint_text_color_fcolor(app, text_layout_id, range,
+                                                                fcolor_id(defcolor_function));
                                         break;
                                     }
                                 } break;
