@@ -3,6 +3,7 @@
 // TOP
 
 // TODO(chogan): Missing functionality
+// - Build panel in opposite panel
 // - Layouts
 // - format {} on insert
 // - [[ or gp (use code index)
@@ -26,6 +27,7 @@
 // - bold keywords and preproc
 // - g d on variables
 // - % to jump to matching ["'
+// - Color filenames and line numbers in compilation buffer
 
 // TODO(chogan): Bugs
 // - e and b don't work in comments
@@ -1638,6 +1640,8 @@ CUSTOM_COMMAND_SIG(cjh_toggle_previous_buffer)
 // Space Commands
 CJH_COMMAND_AND_ENTER_NORMAL_MODE(command_lister)
 CJH_COMMAND_AND_ENTER_NORMAL_MODE(list_all_locations)
+CJH_COMMAND_AND_ENTER_NORMAL_MODE(goto_next_jump)
+CJH_COMMAND_AND_ENTER_NORMAL_MODE(goto_prev_jump)
 
 static Async_Task cjh_ag_async_task = 0;
 
@@ -1880,7 +1884,7 @@ static void cjh_setup_space_mapping(Mapping *mapping, i64 space_cmd_map_id)
     Bind(cjh_start_multi_key_cmd_buffer, KeyCode_B);
     // " c"
     // " d"
-    // Bind(); // " en" 'compilation-next-error-function)
+    // " e"
     Bind(cjh_start_multi_key_cmd_file, KeyCode_F);
     Bind(cjh_start_multi_key_cmd_help, KeyCode_H);
     // " i"
@@ -1890,9 +1894,9 @@ static void cjh_setup_space_mapping(Mapping *mapping, i64 space_cmd_map_id)
     // " k"
     // " l"
     Bind(cjh_start_multi_key_cmd_macro, KeyCode_M);
-    // " n"
+    Bind(cjh_goto_next_jump, KeyCode_N);
     // " o"
-    // " p"
+    Bind(cjh_goto_prev_jump, KeyCode_P);
     Bind(cjh_start_multi_key_cmd_quit, KeyCode_Q);
     // " r"
     Bind(cjh_start_multi_key_cmd_snippet, KeyCode_S);
@@ -2357,6 +2361,7 @@ CUSTOM_COMMAND_SIG(cjh_goto_matching_paren)
 
 CJH_COMMAND_AND_ENTER_NORMAL_MODE(keyboard_macro_replay)
 CJH_COMMAND_AND_ENTER_NORMAL_MODE(query_replace)
+CJH_COMMAND_AND_ENTER_NORMAL_MODE(close_build_panel)
 CJH_CMD_AND_PUSH_MARK(move_up_to_blank_line)
 CJH_CMD_AND_PUSH_MARK(move_down_to_blank_line)
 
@@ -2432,7 +2437,7 @@ static void cjh_setup_normal_mode_mapping(Mapping *mapping, i64 normal_mode_id)
     Bind(move_right_whitespace_boundary, KeyCode_W, KeyCode_Shift);
     Bind(backspace_char, KeyCode_X, KeyCode_Shift);
     // Bind(AVAILABLE, KeyCode_Y, KeyCode_Shift);
-    // Bind(AVAILABLE, KeyCode_Z, KeyCode_Shift);
+    Bind(cjh_close_build_panel, KeyCode_Z, KeyCode_Shift);
 
     Bind(seek_beginning_of_textual_line, KeyCode_0);
 
