@@ -22,7 +22,6 @@
 // - % to jump to matching ["'
 
 // TODO(chogan): Theme
-// - Highlight match/replacement in visual_line_mode_replace_in_range
 // - Syntax highlighting for variable defs, enums, func decl, args
 // - Use draw_line_highlight for visual line mode
 // - Cut cursor in half during multi key command
@@ -30,9 +29,9 @@
 // - bold keywords and preproc
 // - Color filenames and line numbers in compilation buffer
 // - Change matching paren colors to new theme
+// - Highlight match/replacement in visual_line_mode_replace_in_range
 
 // TODO(chogan): Bugs
-// - Why does it always prompt for save on quit?
 // - 'a' should never go to the next line
 // - Cursor goes in between auto inserted ()
 // - Cursor should not move after paste
@@ -42,6 +41,7 @@
 // - d w deletes two words
 // - SPC w hl don't work exactly right
 // - Visual mode highlights regions in both visible buffers
+// - SPC / will occasionally not jump to line
 
 #if !defined(FCODER_CHOGAN_BINDINGS_CPP)
 #define FCODER_CHOGAN_BINDINGS_CPP
@@ -1087,11 +1087,45 @@ static void cjh_setup_file_mapping(Mapping *mapping, i64 file_cmd_map_id)
     Bind(cjh_rename_file_query, KeyCode_R, KeyCode_Shift);
 }
 
+CUSTOM_COMMAND_SIG(cjh_try_exit)
+{
+    User_Input input = get_current_input(app);
+    if (match_core_code(&input, CoreCode_TryExit)){
+        b32 do_exit = true;
+        if (!allow_immediate_close_without_checking_for_changes){
+            b32 has_unsaved_changes = false;
+            for (Buffer_ID buffer = get_buffer_next(app, 0, Access_Always);
+                 buffer != 0;
+                 buffer = get_buffer_next(app, buffer, Access_Always))
+            {
+                Scratch_Block scratch(app);
+                String_Const_u8 name = push_buffer_base_name(app, scratch, buffer);
+                if (name.str[0] == '*')
+                {
+                    continue;
+                }
+                Dirty_State dirty = buffer_get_dirty_state(app, buffer);
+                if (HasFlag(dirty, DirtyState_UnsavedChanges)){
+                    has_unsaved_changes = true;
+                    break;
+                }
+            }
+            if (has_unsaved_changes){
+                View_ID view = get_active_view(app, Access_Always);
+                do_exit = do_4coder_close_user_check(app, view);
+            }
+        }
+        if (do_exit){
+            hard_exit(app);
+        }
+    }
+}
+
 static void cjh_setup_quit_mapping(Mapping *mapping, i64 quit_cmd_map_id)
 {
     CJH_CMD_MAPPING_PREAMBLE(quit_cmd_map_id);
 
-    BindCore(default_try_exit, CoreCode_TryExit);
+    BindCore(cjh_try_exit, CoreCode_TryExit);
 
     Bind(exit_4coder, KeyCode_Q);
 }
@@ -2423,7 +2457,7 @@ static void cjh_setup_normal_mode_mapping(Mapping *mapping, i64 normal_mode_id)
     SelectMapping(mapping);
     SelectMap(normal_mode_id);
 
-    BindCore(default_try_exit, CoreCode_TryExit);
+    BindCore(cjh_try_exit, CoreCode_TryExit);
 
     BindMouseWheel(mouse_wheel_scroll);
     BindMouse(click_set_cursor_and_mark, MouseCode_Left);
@@ -2537,8 +2571,9 @@ static void cjh_setup_normal_mode_mapping(Mapping *mapping, i64 normal_mode_id)
     Bind(cjh_insert_semicolon_at_eol, KeyCode_Semicolon, KeyCode_Control);
 
     // Alt modifier
+    Bind(move_line_up, KeyCode_U, KeyCode_Alt);
+    Bind(move_line_down, KeyCode_D, KeyCode_Alt);
     // M-q fill-paragraph
-
 }
 
 static void cjh_setup_insert_mode_mapping(Mapping *mapping, i64 global_id, i64 file_id, i64 code_id){
@@ -2547,7 +2582,7 @@ static void cjh_setup_insert_mode_mapping(Mapping *mapping, i64 global_id, i64 f
 
     SelectMap(global_id);
     BindCore(chogan_default_startup, CoreCode_Startup);
-    BindCore(default_try_exit, CoreCode_TryExit);
+    BindCore(cjh_try_exit, CoreCode_TryExit);
 
     // Default global
     Bind(keyboard_macro_start_recording , KeyCode_U, KeyCode_Control);
