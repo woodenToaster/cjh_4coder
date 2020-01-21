@@ -4,13 +4,14 @@
 
 // TODO(chogan): Missing functionality
 // - Layouts/workspaces
-// - format {} on insert
+// - format {} () [] on insert
 // - [[ or gp (use code index)
 // - (ydc) i (w(["'a)
 // - surround with ("[{' (enclose_pos)
 // - cjh_fill_paragraph
 // - push mark to register
 // - yank ring
+// - d 0
 
 // TODO(chogan): Enhancements
 // - Alt-p to populate search bar with search history
@@ -32,7 +33,6 @@
 
 // TODO(chogan): Bugs
 // - 'a' should never go to the next line
-// - Cursor goes in between auto inserted ()
 // - Cursor should not move after paste
 // - e and b don't work in comments
 // - Show whitespace doesn't work
@@ -1437,7 +1437,6 @@ static void cjh_setup_c_mapping(Mapping *mapping, i64 c_cmd_map_id)
         cjh_enter_normal_mode(app);             \
     }
 
-CJH_DELETE_COMMAND(cjh_move_right_word)
 CJH_DELETE_COMMAND(move_right_whitespace_boundary)
 CJH_DELETE_COMMAND(move_left_token_boundary)
 CJH_DELETE_COMMAND(move_left_whitespace_boundary)
@@ -1446,6 +1445,16 @@ CJH_DELETE_COMMAND(cjh_find_forward)
 CJH_DELETE_COMMAND(cjh_find_backward)
 CJH_DELETE_COMMAND(cjh_find_forward_til)
 CJH_DELETE_COMMAND(cjh_find_backward_til)
+
+
+CUSTOM_COMMAND_SIG(cjh_move_right_word_d)
+{
+    set_mark(app);
+    cjh_move_right_word(app);
+    move_left(app);
+    cjh_cut(app);
+    cjh_enter_normal_mode(app);
+}
 
 static CUSTOM_COMMAND_SIG(cjh_cut_line)
 {
@@ -2602,7 +2611,6 @@ static void cjh_setup_normal_mode_mapping(Mapping *mapping, i64 normal_mode_id)
     Bind(cjh_start_multi_key_cmd_space, KeyCode_Space);
     Bind(cjh_start_multi_key_cmd_comma, KeyCode_Comma);
     Bind(auto_indent_line_at_cursor, KeyCode_Tab);
-    // Indent (formatted)
 
     // A-Z
     Bind(cjh_eol_insert, KeyCode_A, KeyCode_Shift);
