@@ -3,14 +3,15 @@
 // TOP
 
 // TODO(chogan): Missing functionality
-// - Layouts
+// - J
+// - Layouts/workspaces
 // - format {} on insert
 // - [[ or gp (use code index)
 // - (ydc) i (w(["'a)
 // - surround with ("[{' (enclose_pos)
 // - cjh_fill_paragraph
-// - delete trailing whitespace
 // - push mark to register
+// - yank ring
 
 // TODO(chogan): Enhancements
 // - Alt-p to populate search bar with search history
@@ -22,14 +23,12 @@
 // - % to jump to matching ["'
 
 // TODO(chogan): Theme
-// - Syntax highlighting for variable defs, enums, func decl, args
+// - Syntax highlighting for variable defs, enums, args
 // - Use draw_line_highlight for visual line mode
 // - Cut cursor in half during multi key command
 // - comment face for #if 0 blocks
-// - bold keywords and preproc
-// - Color filenames and line numbers in compilation buffer
-// - Change matching paren colors to new theme
 // - Highlight match/replacement in visual_line_mode_replace_in_range
+// - bold keywords
 
 // TODO(chogan): Bugs
 // - 'a' should never go to the next line
@@ -384,6 +383,68 @@ CJH_START_MULTI_KEY_CMD(window)
 CJH_START_MULTI_KEY_CMD(y)
 
 // Helpers
+static void cjh_draw_comp_buffer_token_colors(Application_Links *app, Text_Layout_ID text_layout_id,
+                                              Buffer_ID buffer_id)
+{
+    Scratch_Block scratch(app);
+    Range_i64 visible_range = text_layout_get_visible_range(app, text_layout_id);
+    String_Const_u8 visible_text = push_buffer_range(app, scratch, buffer_id, visible_range);
+    List_String_Const_u8 lines = string_split(scratch, visible_text, SCu8("\n").str, 1);
+    paint_text_color_fcolor(app, text_layout_id, visible_range, fcolor_id(defcolor_text_default));
+
+    u64 line_start_pos = visible_range.start;
+    if (visible_range.start == 0)
+    {
+        // TODO(cjh): I don't think CLINK in the lines output is u8. That makes the count off
+        line_start_pos++;
+    }
+
+    for (Node_String_Const_u8 *node = lines.first;
+         node != 0;
+         node = node->next)
+    {
+        // NOTE(cjh): Only deal with lines that start with a drive and :
+        // TODO(chogan): @Linux
+        if (node->string.size < 2 || !character_is_alpha(node->string.str[0]) ||
+            node->string.str[1] != ':')
+        {
+            line_start_pos += node->string.size + 1;
+            continue;
+        }
+
+        // NOTE(cjh): Highlight filenames
+        i64 first_paren = string_find_first(node->string, 0, '(');
+        Range_i64 filename_range = {};
+        filename_range.start = line_start_pos;
+        filename_range.end = line_start_pos + first_paren + 1;
+        paint_text_color_fcolor(app, text_layout_id, filename_range, fcolor_id(defcolor_keyword));
+
+        // NOTE(cjh): Highlight line numbers
+        i64 last_paren = string_find_first(node->string, first_paren + 1, ')');
+        i64 first_paren_abs = first_paren + line_start_pos;
+        i64 last_paren_abs = last_paren + line_start_pos;
+        Range_i64 line_number_range = {};
+        line_number_range.start = first_paren_abs + 1;
+        line_number_range.end = last_paren_abs;
+        paint_text_color_fcolor(app, text_layout_id, line_number_range, fcolor_id(defcolor_function));
+        paint_text_color_pos(app, text_layout_id, first_paren_abs, fcolor_id(defcolor_special_character));
+        paint_text_color_pos(app, text_layout_id, last_paren_abs, fcolor_id(defcolor_special_character));
+
+        // NOTE(cjh): Highlight "error"
+        String_Const_u8 needle = SCu8("error");
+        i64 match_start = string_find_first(node->string, needle, StringMatch_Exact);
+        if ((u64)match_start != node->string.size)
+        {
+            i64 match_start_abs = line_start_pos + match_start;
+            Range_i64 buffer_range = {};
+            buffer_range.start = match_start_abs;
+            buffer_range.end = match_start_abs + needle.size + 1;
+            paint_text_color_fcolor(app, text_layout_id, buffer_range, fcolor_id(defcolor_special_character));
+        }
+
+        line_start_pos += node->string.size + 1;
+    }
+}
 
 static void cjh_draw_search_buffer_token_colors(Application_Links *app, Text_Layout_ID text_layout_id,
                                                 Buffer_ID buffer_id)
@@ -1728,6 +1789,7 @@ CJH_COMMAND_AND_ENTER_NORMAL_MODE(command_lister)
 CJH_COMMAND_AND_ENTER_NORMAL_MODE(list_all_locations)
 CJH_COMMAND_AND_ENTER_NORMAL_MODE(goto_next_jump)
 CJH_COMMAND_AND_ENTER_NORMAL_MODE(goto_prev_jump)
+CJH_COMMAND_AND_ENTER_NORMAL_MODE(clean_all_lines)
 
 static Async_Task cjh_ag_async_task = 0;
 
@@ -1968,7 +2030,7 @@ static void cjh_setup_space_mapping(Mapping *mapping, i64 space_cmd_map_id)
 
     // " a"
     Bind(cjh_start_multi_key_cmd_buffer, KeyCode_B);
-    // " c"
+    Bind(cjh_clean_all_lines, KeyCode_C);
     // " d"
     // " e"
     Bind(cjh_start_multi_key_cmd_file, KeyCode_F);
@@ -2444,6 +2506,28 @@ CUSTOM_COMMAND_SIG(cjh_goto_matching_paren)
             break;
     }
 }
+static void cjh_snap_cursor_to_percentage(Application_Links *app, f32 percent_to_top)
+{
+    View_ID view = get_active_view(app, Access_ReadVisible);
+    Rect_f32 region = view_get_buffer_region(app, view);
+    i64 pos = view_get_cursor_pos(app, view);
+    Buffer_Cursor cursor = view_compute_cursor(app, view, seek_pos(pos));
+    f32 view_height = rect_height(region);
+    Buffer_Scroll scroll = view_get_buffer_scroll(app, view);
+    scroll.target.line_number = cursor.line;
+    scroll.target.pixel_shift.y = -view_height * percent_to_top;
+    view_set_buffer_scroll(app, view, scroll, SetBufferScroll_SnapCursorIntoView);
+}
+
+CUSTOM_COMMAND_SIG(cjh_view_to_bottom)
+{
+    cjh_snap_cursor_to_percentage(app, 0.95f);
+}
+
+CUSTOM_COMMAND_SIG(cjh_view_to_top)
+{
+    cjh_snap_cursor_to_percentage(app, 0.05f);
+}
 
 CJH_COMMAND_AND_ENTER_NORMAL_MODE(keyboard_macro_replay)
 CJH_COMMAND_AND_ENTER_NORMAL_MODE(query_replace)
@@ -2505,12 +2589,12 @@ static void cjh_setup_normal_mode_mapping(Mapping *mapping, i64 normal_mode_id)
     // Bind(AVAILABLE, KeyCode_E, KeyCode_Shift);
     Bind(cjh_find_backward, KeyCode_F, KeyCode_Shift);
     Bind(goto_end_of_file, KeyCode_G, KeyCode_Shift);
-    // Bind(AVAILABLE, KeyCode_H, KeyCode_Shift);
+    Bind(cjh_view_to_top, KeyCode_H, KeyCode_Shift);
     Bind(cjh_insert_beginning_of_line, KeyCode_I, KeyCode_Shift);
     // Bind(cjh_delete_indentation, KeyCode_J, KeyCode_Shift);
     // Bind(AVAILABLE, KeyCode_K, KeyCode_Shift);
-    // Bind(AVAILABLE, KeyCode_L, KeyCode_Shift);
-    // Bind(move_to_window_line_top_bottom, KeyCode_M, KeyCode_Shift);
+    Bind(cjh_view_to_bottom, KeyCode_L, KeyCode_Shift);
+    // Bind(AVAILABLE, Keycode_M, Keycode_Shift);
     Bind(goto_prev_jump, KeyCode_N, KeyCode_Shift);
     Bind(cjh_open_newline_above, KeyCode_O, KeyCode_Shift);
     // Bind(AVAILABLE, KeyCode_P, KeyCode_Shift);
