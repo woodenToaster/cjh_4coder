@@ -3,7 +3,6 @@
 // TOP
 
 // TODO(chogan): Missing functionality
-// - J
 // - Layouts/workspaces
 // - format {} on insert
 // - [[ or gp (use code index)
@@ -21,6 +20,7 @@
 // - remove fd from undo buffer
 // - g d on variables
 // - % to jump to matching ["'
+// - Look into batch edits to make undo and . nicer
 
 // TODO(chogan): Theme
 // - Syntax highlighting for variable defs, enums, args
@@ -2529,6 +2529,29 @@ CUSTOM_COMMAND_SIG(cjh_view_to_top)
     cjh_snap_cursor_to_percentage(app, 0.05f);
 }
 
+CUSTOM_COMMAND_SIG(cjh_combine_lines)
+{
+    seek_end_of_line(app);
+
+    View_ID view = get_active_view(app, Access_ReadVisible);
+    Buffer_ID buffer = view_get_buffer(app, view, Access_ReadVisible);
+    i64 pos = view_get_cursor_pos(app, view);
+
+    for (;;)
+    {
+        char query = buffer_get_char(app, buffer, pos);
+        if (character_is_whitespace(query))
+        {
+            delete_char(app);
+        }
+        else
+        {
+            break;
+        }
+    }
+    write_text(app, string_u8_litexpr(" "));
+}
+
 CJH_COMMAND_AND_ENTER_NORMAL_MODE(keyboard_macro_replay)
 CJH_COMMAND_AND_ENTER_NORMAL_MODE(query_replace)
 CJH_COMMAND_AND_ENTER_NORMAL_MODE(close_build_panel)
@@ -2591,7 +2614,7 @@ static void cjh_setup_normal_mode_mapping(Mapping *mapping, i64 normal_mode_id)
     Bind(goto_end_of_file, KeyCode_G, KeyCode_Shift);
     Bind(cjh_view_to_top, KeyCode_H, KeyCode_Shift);
     Bind(cjh_insert_beginning_of_line, KeyCode_I, KeyCode_Shift);
-    // Bind(cjh_delete_indentation, KeyCode_J, KeyCode_Shift);
+    Bind(cjh_combine_lines, KeyCode_J, KeyCode_Shift);
     // Bind(AVAILABLE, KeyCode_K, KeyCode_Shift);
     Bind(cjh_view_to_bottom, KeyCode_L, KeyCode_Shift);
     // Bind(AVAILABLE, Keycode_M, Keycode_Shift);

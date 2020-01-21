@@ -61,7 +61,7 @@ CUSTOM_DOC("Inserts whatever text was used to trigger this command.")
 {
     User_Input in = get_current_input(app);
     String_Const_u8 insert = to_writable(&in);
-
+#if 0
     switch (insert.str[0])
     {
         case '{':
@@ -97,6 +97,7 @@ CUSTOM_DOC("Inserts whatever text was used to trigger this command.")
             insert.str[0] = '\'';
         } break;
     }
+#endif
     write_text(app, insert);
 }
 
