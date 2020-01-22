@@ -12,6 +12,7 @@
 // - push mark to register
 // - yank ring
 // - d 0
+// - SPC TAB
 
 // TODO(chogan): Enhancements
 // - Alt-p to populate search bar with search history

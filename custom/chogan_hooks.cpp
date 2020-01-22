@@ -13,10 +13,10 @@ CUSTOM_DOC("Default command for responding to a startup event")
         String_Const_u8_Array file_names = input.event.core.file_names;
         load_themes_default_folder(app);
         default_4coder_initialize(app, file_names);
-        cjh_side_by_side_panels(app);
         if (global_config.automatically_load_project){
             load_project(app);
         }
+        cjh_side_by_side_panels(app);
     }
     cjh_enter_normal_mode(app);
 }
