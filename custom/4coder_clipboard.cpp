@@ -4,7 +4,7 @@
 
 // TOP
 
- function b32
+function b32
 clipboard_post_buffer_range(Application_Links *app, i32 clipboard_index, Buffer_ID buffer, Range_i64 range){
     b32 success = false;
     Scratch_Block scratch(app);
@@ -78,15 +78,15 @@ CUSTOM_DOC("At the cursor, insert the text at the top of the clipboard.")
             buffer_replace_range(app, buffer, Ii64(pos), string);
             view_set_mark(app, view, seek_pos(pos));
             view_set_cursor_and_preferred_x(app, view, seek_pos(pos + (i32)string.size));
+
             if (has_newline)
             {
                 // NOTE(cjh): Delete the extra newline we added before pasting
                 backspace_char(app);
             }
 
-            // TODO(allen): Send this to all views.
             ARGB_Color argb = fcolor_resolve(fcolor_id(defcolor_paste));
-            view_post_fade(app, view, 0.667f, Ii64_size(pos, string.size), argb);
+            buffer_post_fade(app, buffer, 0.667f, Ii64_size(pos, string.size), argb);
         }
     }
 }
@@ -122,7 +122,7 @@ CUSTOM_DOC("If the previous command was paste or paste_next, replaces the paste 
             view_set_cursor_and_preferred_x(app, view, seek_pos(pos + string.size));
             
             ARGB_Color argb = fcolor_resolve(fcolor_id(defcolor_paste));
-            view_post_fade(app, view, 0.667f, Ii64_size(pos, string.size), argb);
+            buffer_post_fade(app, buffer, 0.667f, Ii64_size(pos, string.size), argb);
         }
         else{
             paste(app);
@@ -173,9 +173,7 @@ CUSTOM_COMMAND_SIG(multi_paste){
             view_set_cursor_and_preferred_x(app, view, seek_pos(range.max + insert_string.size));
             
             ARGB_Color argb = fcolor_resolve(fcolor_id(defcolor_paste));
-            view_post_fade(app, view, 0.667f,
-                           Ii64(range.max + 1, range.max + insert_string.size),
-                           argb);
+            view_post_fade(app, buffer, 0.667f, Ii64(range.max + 1, range.max + insert_string.size), argb);
         }
         else{
             paste(app);
@@ -230,9 +228,8 @@ multi_paste_range(Application_Links *app, View_ID view, Range_i64 range, i32 pas
             view_set_mark(app, view, seek_pos(finish_range.min));
             view_set_cursor_and_preferred_x(app, view, seek_pos(finish_range.max));
             
-            // TODO(allen): Send this to all views.
             ARGB_Color argb = fcolor_resolve(fcolor_id(defcolor_paste));
-            view_post_fade(app, view, 0.667f, finish_range, argb);
+            buffer_post_fade(app, buffer, 0.667f, finish_range, argb);
         }
     }
     return(finish_range);
