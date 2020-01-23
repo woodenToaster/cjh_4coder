@@ -13,6 +13,7 @@ defcolor_list_item_hover = managed_id_declare(app, string_u8_litexpr("colors"), 
 defcolor_list_item_active = managed_id_declare(app, string_u8_litexpr("colors"), string_u8_litexpr("defcolor_list_item_active"));
 defcolor_normal_cursor = managed_id_declare(app, string_u8_litexpr("colors"), string_u8_litexpr("defcolor_normal_cursor"));
 defcolor_insert_cursor = managed_id_declare(app, string_u8_litexpr("colors"), string_u8_litexpr("defcolor_insert_cursor"));
+defcolor_cursor = managed_id_declare(app, string_u8_litexpr("colors"), string_u8_litexpr("defcolor_cursor"));
 defcolor_function = managed_id_declare(app, string_u8_litexpr("colors"), string_u8_litexpr("defcolor_function"));
 defcolor_at_cursor = managed_id_declare(app, string_u8_litexpr("colors"), string_u8_litexpr("defcolor_at_cursor"));
 defcolor_highlight_cursor_line = managed_id_declare(app, string_u8_litexpr("colors"), string_u8_litexpr("defcolor_highlight_cursor_line"));

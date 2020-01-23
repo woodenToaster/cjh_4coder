@@ -197,6 +197,10 @@ default_tick(Application_Links *app, Frame_Info frame_info){
     }
     
     buffer_modified_set_clear();
+    
+    if (tick_all_fade_ranges(frame_info.animation_dt)){
+        animate_in_n_milliseconds(app, 0);
+    }
 }
 
 function Rect_f32
@@ -260,7 +264,7 @@ recursive_nest_highlight(Application_Links *app, Text_Layout_ID layout_id, Range
         }
     }
     
-     ARGB_Color argb = finalize_color(defcolor_text_cycle, counter);
+    ARGB_Color argb = finalize_color(defcolor_text_cycle, counter);
     
     for (;ptr < ptr_end; ptr += 1){
         Code_Index_Nest *nest = *ptr;
@@ -381,7 +385,10 @@ chogan_render_buffer(Application_Links *app, View_ID view_id, Face_ID face_id,
         cjh_draw_cursor_mark_highlight(app, view_id, is_active_view, buffer, text_layout_id, cursor_roundness,
                                        mark_thickness);
     }
-
+    
+    // NOTE(allen): Fade ranges
+    paint_fade_ranges(app, text_layout_id, buffer, view_id);
+    
     // NOTE(allen): put the actual text on the actual screen
     draw_text_layout_default(app, text_layout_id);
     
@@ -647,18 +654,18 @@ do_full_lex_async__inner(Async_Context *actx, Buffer_ID buffer_id){
     Token_List list = {};
     b32 canceled = false;
     
-        Lex_State_Cpp state = {};
-        lex_full_input_cpp_init(&state, contents);
-        for (;;){
-            ProfileBlock(app, "async lex block");
-            if (lex_full_input_cpp_breaks(scratch, &list, &state, limit_factor)){
-                break;
-            }
-            if (async_check_canceled(actx)){
-                canceled = true;
-                break;
-            }
+    Lex_State_Cpp state = {};
+    lex_full_input_cpp_init(&state, contents);
+    for (;;){
+        ProfileBlock(app, "async lex block");
+        if (lex_full_input_cpp_breaks(scratch, &list, &state, limit_factor)){
+            break;
         }
+        if (async_check_canceled(actx)){
+            canceled = true;
+            break;
+        }
+    }
     
     if (!canceled){
         ProfileBlock(app, "async lex save results (before mutex)");
@@ -824,7 +831,7 @@ BUFFER_HOOK_SIG(default_begin_buffer){
     b32 treat_as_code = false;
     String_Const_u8 file_name = push_buffer_file_name(app, scratch, buffer_id);
     if (file_name.size > 0){
-    String_Const_u8_Array extensions = global_config.code_exts;
+        String_Const_u8_Array extensions = global_config.code_exts;
         String_Const_u8 ext = string_file_extension(file_name);
         for (i32 i = 0; i < extensions.count; ++i){
             if (string_match(ext, extensions.strings[i])){
@@ -1128,7 +1135,7 @@ BUFFER_HOOK_SIG(default_end_buffer){
     if (lex_task_ptr != 0){
         async_task_cancel(&global_async_system, *lex_task_ptr);
     }
-        buffer_unmark_as_modified(buffer_id);
+    buffer_unmark_as_modified(buffer_id);
     code_index_lock();
     code_index_erase_file(buffer_id);
     code_index_unlock();

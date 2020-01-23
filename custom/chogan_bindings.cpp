@@ -110,6 +110,10 @@ static bool cjh_in_visual_mode();
 
 #include "4coder_default_include.cpp"
 
+// NOTE(allen): Users can declare their own managed IDs here.
+
+#include "generated/managed_id_metadata.cpp"
+
 struct MarkNode
 {
     i64 pos;
