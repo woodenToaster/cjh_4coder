@@ -4,7 +4,7 @@
 
 // TODO(chogan): Missing functionality
 // - Layouts/workspaces
-// - format {} () [] on insert
+// - How to handle inserting () []?
 // - [[ or gp (use code index)
 // - (ydc) i (w(["'a)
 // - surround with ("[{' (enclose_pos)
@@ -12,7 +12,6 @@
 // - push mark to register
 // - yank ring
 // - d 0
-// - SPC TAB
 
 // TODO(chogan): Enhancements
 // - Alt-p to populate search bar with search history
@@ -87,6 +86,21 @@ struct CjhMultiKeyCmdHooks
     CjhMultiKeyCmdHook *cjh_y_hook;
 };
 
+static void cjh_buffer_hook();
+static void *cjh_c_hook();
+static void *cjh_comma_hook();
+static void *cjh_d_hook();
+static void *cjh_file_hook();
+static void *cjh_g_hook();
+static void *cjh_help_hook();
+static void *cjh_macro_hook();
+static void *cjh_quit_hook();
+static void *cjh_space_hook();
+static void *cjh_snippet_hook();
+static void *cjh_toggle_hook();
+static void *cjh_window_hook();
+static void *cjh_y_hook();
+
 static u8 cjh_last_f_search;
 static bool cjh_last_find_was_til;
 static bool cjh_recording_command;
@@ -130,6 +144,7 @@ struct MarkRing
 
 static MarkRing cjh_mark_ring;
 static Buffer_Identifier cjh_status_buffer = buffer_identifier(string_u8_litexpr("*status*"));
+static View_ID cjh_last_buffer;
 static View_ID cjh_status_footer_panel_view_id;
 static View_ID cjh_search_panel_view_id;
 
@@ -1139,9 +1154,16 @@ static void cjh_setup_window_mapping(Mapping *mapping, i64 window_cmd_map_id)
 }
 
 // File commands
-CJH_COMMAND_AND_ENTER_NORMAL_MODE(interactive_open_or_new)
 CJH_COMMAND_AND_ENTER_NORMAL_MODE(open_in_other)
 CJH_COMMAND_AND_ENTER_NORMAL_MODE(rename_file_query)
+
+CUSTOM_COMMAND_SIG(cjh_interactive_open_or_new)
+{
+    interactive_open_or_new(app);
+    View_ID view = get_active_view(app, Access_ReadVisible);
+    cjh_last_buffer = view_get_buffer(app, view, Access_ReadVisible);
+    cjh_enter_normal_mode(app);
+}
 
 static void cjh_setup_file_mapping(Mapping *mapping, i64 file_cmd_map_id)
 {
@@ -1210,9 +1232,9 @@ static void cjh_setup_toggle_mapping(Mapping *mapping, i64 toggle_cmd_map_id)
     CJH_CMD_MAPPING_PREAMBLE(toggle_cmd_map_id);
 
     Bind(cjh_toggle_filebar, KeyCode_B);
+    Bind(cjh_toggle_fullscreen, KeyCode_F);
     Bind(cjh_toggle_line_wrap, KeyCode_L);
     Bind(cjh_toggle_line_numbers, KeyCode_N);
-    Bind(cjh_toggle_fullscreen, KeyCode_S);
     Bind(cjh_toggle_fps_meter, KeyCode_T);
     Bind(cjh_toggle_virtual_whitespace, KeyCode_V);
     Bind(cjh_toggle_show_whitespace, KeyCode_W);
@@ -1773,30 +1795,14 @@ static void cjh_setup_visual_mode_mapping(Mapping *mapping, i64 visual_mode_cmd_
     Bind(cjh_copy, KeyCode_Y);
 }
 
-#if 0
-static bool cjh_toggle_buffer_forward;
 CUSTOM_COMMAND_SIG(cjh_toggle_previous_buffer)
 {
-    Buffer_ID new_buffer = 0;
-    View_ID view = get_active_view(app, Access_Read);
-    Buffer_ID buffer = view_get_buffer(app, view, Access_Read);
-    if (cjh_toggle_buffer_forward)
-    {
-        new_buffer = get_buffer_next(app, buffer, Access_Read);
-    }
-    else
-    {
-        new_buffer = get_buffer_prev(app, buffer, Access_Read);
-    }
-
-    if (new_buffer)
-    {
-        view_set_buffer(app, view, new_buffer);
-        cjh_toggle_buffer_forward = !cjh_toggle_buffer_forward;
-    }
+    View_ID view = get_active_view(app, Access_ReadVisible);
+    Buffer_ID buffer = view_get_buffer(app, view, Access_ReadVisible);
+    view_set_buffer(app, view, cjh_last_buffer, 0);
+    cjh_last_buffer = buffer;
     cjh_enter_normal_mode(app);
 }
-#endif
 
 // Space Commands
 CJH_COMMAND_AND_ENTER_NORMAL_MODE(command_lister)
@@ -2071,7 +2077,7 @@ static void cjh_setup_space_mapping(Mapping *mapping, i64 space_cmd_map_id)
     // " z"
     Bind(cjh_command_lister, KeyCode_Space);
     Bind(cjh_interactive_search_project_ag, KeyCode_ForwardSlash);
-    // Bind(cjh_toggle_previous_buffer, KeyCode_Tab);
+    Bind(cjh_toggle_previous_buffer, KeyCode_Tab);
     Bind(cjh_insert_newline_above, KeyCode_LeftBracket);
     Bind(cjh_insert_newline_below, KeyCode_RightBracket);
     Bind(cjh_interactive_search_project_identifier_ag, KeyCode_8, KeyCode_Shift);
@@ -2675,6 +2681,7 @@ static void cjh_setup_normal_mode_mapping(Mapping *mapping, i64 normal_mode_id)
     // -
     // =
     // backslash
+
     Bind(cjh_search_forward, KeyCode_ForwardSlash);
     Bind(cjh_repeat_last_find_cmd, KeyCode_Semicolon);
     // Bind(cjh_goto_mark, KeyCode_Quote);
@@ -2694,6 +2701,14 @@ static void cjh_setup_normal_mode_mapping(Mapping *mapping, i64 normal_mode_id)
     Bind(move_line_up, KeyCode_U, KeyCode_Alt);
     Bind(move_line_down, KeyCode_D, KeyCode_Alt);
     // M-q fill-paragraph
+}
+
+CUSTOM_COMMAND_SIG(cjh_open_func_brackets)
+{
+    write_text(app, SCu8("\n{\n\n}\n"));
+    move_up(app);
+    move_up(app);
+    auto_indent_line_at_cursor(app);
 }
 
 static void cjh_setup_insert_mode_mapping(Mapping *mapping, i64 global_id, i64 file_id, i64 code_id){
@@ -2851,6 +2866,7 @@ static void cjh_setup_insert_mode_mapping(Mapping *mapping, i64 global_id, i64 f
     Bind(open_file_in_quotes,        KeyCode_1, KeyCode_Alt);
     Bind(open_matching_file_cpp,     KeyCode_2, KeyCode_Alt);
     Bind(write_zero_struct,          KeyCode_0, KeyCode_Control);
+    Bind(cjh_open_func_brackets, KeyCode_Return, KeyCode_Shift);
 }
 
 void
