@@ -4,14 +4,14 @@
 
 // TODO(chogan): Missing functionality
 // - Layouts/workspaces
-// - How to handle inserting () []?
+// - How to handle inserting () [] ""?
 // - [[ or gp (use code index)
 // - (ydc) i (w(["'a)
 // - surround with ("[{' (enclose_pos)
 // - cjh_fill_paragraph
-// - push mark to register
 // - yank ring
-// - d 0
+// - Show whitespace
+// - Show trailing whitespace
 
 // TODO(chogan): Enhancements
 // - Alt-p to populate search bar with search history
@@ -35,7 +35,6 @@
 // - 'a' should never go to the next line
 // - Cursor should not move after paste
 // - e and b don't work in comments
-// - Show whitespace doesn't work
 // - delete paste in visual line mode cuts off an extra character
 // - d w deletes two words
 // - SPC w hl don't work exactly right
@@ -76,6 +75,7 @@ struct CjhMultiKeyCmdHooks
     CjhMultiKeyCmdHook *cjh_g_hook;
     CjhMultiKeyCmdHook *cjh_help_hook;
     CjhMultiKeyCmdHook *cjh_macro_hook;
+    CjhMultiKeyCmdHook *cjh_profile_hook;
     CjhMultiKeyCmdHook *cjh_quit_hook;
     CjhMultiKeyCmdHook *cjh_space_hook;
     CjhMultiKeyCmdHook *cjh_snippet_hook;
@@ -147,6 +147,8 @@ static Buffer_Identifier cjh_status_buffer = buffer_identifier(string_u8_litexpr
 static View_ID cjh_last_buffer;
 static View_ID cjh_status_footer_panel_view_id;
 static View_ID cjh_search_panel_view_id;
+
+static MarkNode cjh_registers[26];
 
 // MarkRing
 static void cjh_push_mark(Application_Links *app)
@@ -393,6 +395,7 @@ CJH_START_MULTI_KEY_CMD(file)
 CJH_START_MULTI_KEY_CMD(g)
 CJH_START_MULTI_KEY_CMD(help)
 CJH_START_MULTI_KEY_CMD(macro)
+CJH_START_MULTI_KEY_CMD(profile)
 CJH_START_MULTI_KEY_CMD(quit)
 CJH_START_MULTI_KEY_CMD(snippet)
 CJH_START_MULTI_KEY_CMD(space)
@@ -1384,6 +1387,22 @@ static void cjh_setup_macro_mapping(Mapping *mapping, i64 macro_cmd_map_id)
     // Bind(cjh_display_recorded_macro, KeyCode_D);
 }
 
+// profile commands
+CJH_COMMAND_AND_ENTER_NORMAL_MODE(profile_clear);
+CJH_COMMAND_AND_ENTER_NORMAL_MODE(profile_disable);
+CJH_COMMAND_AND_ENTER_NORMAL_MODE(profile_enable);
+CJH_COMMAND_AND_ENTER_NORMAL_MODE(profile_inspect);
+
+static void cjh_setup_profile_mapping(Mapping *mapping, i64 profile_cmd_map_id)
+{
+    CJH_CMD_MAPPING_PREAMBLE(profile_cmd_map_id);
+
+    Bind(cjh_profile_clear, KeyCode_C);
+    Bind(cjh_profile_disable, KeyCode_D);
+    Bind(cjh_profile_enable, KeyCode_E);
+    Bind(cjh_profile_inspect, KeyCode_I);
+}
+
 // C commands
 
 #define CJH_CHANGE_COMMAND(motion)              \
@@ -2062,9 +2081,9 @@ static void cjh_setup_space_mapping(Mapping *mapping, i64 space_cmd_map_id)
     // " k"
     // " l"
     Bind(cjh_start_multi_key_cmd_macro, KeyCode_M);
-    Bind(cjh_goto_next_jump, KeyCode_N);
+    // Bind(AVAILABLE, KeyCode_N);
     // " o"
-    Bind(cjh_goto_prev_jump, KeyCode_P);
+    Bind(cjh_start_multi_key_cmd_profile, KeyCode_P);
     Bind(cjh_start_multi_key_cmd_quit, KeyCode_Q);
     // " r"
     Bind(cjh_start_multi_key_cmd_snippet, KeyCode_S);
@@ -2572,6 +2591,35 @@ CUSTOM_COMMAND_SIG(cjh_combine_lines)
     write_text(app, string_u8_litexpr(" "));
 }
 
+CUSTOM_COMMAND_SIG(cjh_put_mark_to_register)
+{
+    char reg = cjh_get_char_from_user(app);
+    if (reg >= 'a' && reg <= 'z')
+    {
+        u8 index = reg - 'a';
+        MarkNode *mark = cjh_registers + index;
+        View_ID view = get_active_view(app, Access_Always);
+        Buffer_ID buffer = view_get_buffer(app, view, Access_Always);
+        i64 pos = view_get_cursor_pos(app, view);
+        mark->pos = pos;
+        mark->buffer = buffer;
+    }
+}
+
+CUSTOM_COMMAND_SIG(cjh_jump_to_register)
+{
+    cjh_push_mark(app);
+    char reg = cjh_get_char_from_user(app);
+    if (reg >= 'a' && reg <= 'z')
+    {
+        u8 index = reg - 'a';
+        MarkNode *mark = cjh_registers + index;
+        View_ID view = get_active_view(app, Access_Always);
+        view_set_buffer(app, view, mark->buffer, 0);
+        view_set_cursor(app, view, seek_pos(mark->pos));
+    }
+}
+
 CJH_COMMAND_AND_ENTER_NORMAL_MODE(keyboard_macro_replay)
 CJH_COMMAND_AND_ENTER_NORMAL_MODE(query_replace)
 CJH_COMMAND_AND_ENTER_NORMAL_MODE(close_build_panel)
@@ -2604,13 +2652,13 @@ static void cjh_setup_normal_mode_mapping(Mapping *mapping, i64 normal_mode_id)
     Bind(move_down, KeyCode_J);
     Bind(move_up, KeyCode_K);
     Bind(move_right, KeyCode_L);
-    Bind(cursor_mark_swap, KeyCode_M);
+    Bind(cjh_put_mark_to_register, KeyCode_M);
     Bind(goto_next_jump, KeyCode_N);
     Bind(cjh_open_newline_below, KeyCode_O);
     Bind(paste, KeyCode_P);
     Bind(cjh_query_replace, KeyCode_Q);
     Bind(cjh_replace_char, KeyCode_R);
-    // Bind(AVAILABLE, KeyCode_S);
+    Bind(cursor_mark_swap, KeyCode_S);
     Bind(cjh_find_forward_til, KeyCode_T);
     Bind(undo, KeyCode_U);
     Bind(cjh_start_multi_key_cmd_visual_mode, KeyCode_V);
@@ -2677,6 +2725,7 @@ static void cjh_setup_normal_mode_mapping(Mapping *mapping, i64 normal_mode_id)
     // :
 
     // Special characters
+    Bind(cjh_jump_to_register, KeyCode_Quote);
     // `
     // -
     // =
@@ -2703,9 +2752,12 @@ static void cjh_setup_normal_mode_mapping(Mapping *mapping, i64 normal_mode_id)
     // M-q fill-paragraph
 }
 
-CUSTOM_COMMAND_SIG(cjh_open_func_brackets)
+CUSTOM_COMMAND_SIG(cjh_open_curly_braces)
 {
+    seek_end_of_line(app);
+    set_mark(app);
     write_text(app, SCu8("\n{\n\n}\n"));
+    auto_indent_range(app);
     move_up(app);
     move_up(app);
     auto_indent_line_at_cursor(app);
@@ -2866,7 +2918,7 @@ static void cjh_setup_insert_mode_mapping(Mapping *mapping, i64 global_id, i64 f
     Bind(open_file_in_quotes,        KeyCode_1, KeyCode_Alt);
     Bind(open_matching_file_cpp,     KeyCode_2, KeyCode_Alt);
     Bind(write_zero_struct,          KeyCode_0, KeyCode_Control);
-    Bind(cjh_open_func_brackets, KeyCode_Return, KeyCode_Shift);
+    Bind(cjh_open_curly_braces, KeyCode_Return, KeyCode_Shift);
 }
 
 void
@@ -2902,6 +2954,7 @@ custom_layer_init(Application_Links *app){
     cjh_setup_help_mapping(&framework_mapping, cjh_mapid_help);
     cjh_setup_macro_mapping(&framework_mapping, cjh_mapid_macro);
     cjh_setup_normal_mode_mapping(&framework_mapping, cjh_mapid_normal_mode);
+    cjh_setup_profile_mapping(&framework_mapping, cjh_mapid_profile);
     cjh_setup_quit_mapping(&framework_mapping, cjh_mapid_quit);
     cjh_setup_snippet_mapping(&framework_mapping, cjh_mapid_snippet);
     cjh_setup_space_mapping(&framework_mapping, cjh_mapid_space);

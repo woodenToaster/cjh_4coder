@@ -39,6 +39,7 @@ CUSTOM_ID(command_map, cjh_mapid_g);
 CUSTOM_ID(command_map, cjh_mapid_help);
 CUSTOM_ID(command_map, cjh_mapid_macro);
 CUSTOM_ID(command_map, cjh_mapid_normal_mode);
+CUSTOM_ID(command_map, cjh_mapid_profile);
 CUSTOM_ID(command_map, cjh_mapid_quit);
 CUSTOM_ID(command_map, cjh_mapid_snippet);
 CUSTOM_ID(command_map, cjh_mapid_space);
