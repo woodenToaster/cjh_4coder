@@ -18,6 +18,7 @@ gray = 0xff928374;
 dark_gray = 0xff928374;
 text = 0xffd5c4a1;
 highlight = 0xff504945;
+todo = 0xffd75f87;
 
 defcolor_back = bg0_s;
 defcolor_margin = 0xFF212026;
@@ -40,7 +41,7 @@ defcolor_text_default = text;
 defcolor_at_highlight = 0xFF90B2A4;
 defcolor_comment = gray;
 // NOTE(cjh): Coloring NOTE, TODO, TEMP, IMPORTANT
-defcolor_comment_pop = {dark_yellow, orange, aqua, dark_red};
+defcolor_comment_pop = {dark_yellow, todo, aqua, dark_red};
 defcolor_keyword = blue;
 defcolor_str_constant = green;
 defcolor_char_constant = defcolor_str_constant;
