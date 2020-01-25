@@ -4,14 +4,12 @@
 
 // TODO(chogan): Missing functionality
 // - Layouts/workspaces
-// - How to handle inserting () [] ""?
 // - [[ or gp (use code index)
 // - (ydc) i (w(["'a)
 // - surround with ("[{' (enclose_pos)
 // - cjh_fill_paragraph
-// - yank ring
-// - Show whitespace
 // - Show trailing whitespace
+// - C-v mode
 
 // TODO(chogan): Enhancements
 // - Alt-p to populate search bar with search history
@@ -22,6 +20,7 @@
 // - g d on variables
 // - % to jump to matching ["'
 // - Look into batch edits to make undo and . nicer
+// - How to handle inserting () [] ""?
 
 // TODO(chogan): Theme
 // - Syntax highlighting for variable defs, enums, args
@@ -30,12 +29,13 @@
 // - comment face for #if 0 blocks
 // - Highlight match/replacement in visual_line_mode_replace_in_range
 // - bold keywords
+// - Change jump list highlight
 
 // TODO(chogan): Bugs
 // - 'a' should never go to the next line
 // - Cursor should not move after paste
 // - e and b don't work in comments
-// - delete paste in visual line mode cuts off an extra character
+// - (delete | yank) paste in visual line mode cuts off an extra character
 // - d w deletes two words
 // - SPC w hl don't work exactly right
 // - Visual mode highlights regions in both visible buffers
@@ -243,10 +243,16 @@ static void cjh_update_visual_line_mode_range(Application_Links *app)
     view_set_cursor(app, view, seek_pos(saved_cursor));
 }
 
-static void cjh_paint_tokens(Application_Links *app, Buffer_ID buffer, Text_Layout_ID text_layout_id)
+static void cjh_paint_tokens(Application_Links *app, Buffer_ID buffer, Text_Layout_ID text_layout_id,
+                             Face_ID face_id)
 {
+    ProfileScope(app, __func__);
     Scratch_Block scratch(app);
     FColor col = {};
+
+    View_ID view = get_active_view(app, Access_ReadVisible);
+    b64 show_whitespace = false;
+    view_get_setting(app, view, ViewSetting_ShowWhitespace, &show_whitespace);
 
     Token_Array array = get_token_array_from_buffer(app, buffer);
     if (array.tokens != 0){
@@ -332,6 +338,41 @@ static void cjh_paint_tokens(Application_Links *app, Buffer_ID buffer, Text_Layo
                     }
                 }
             }
+            else if (token->kind == TokenBaseKind_Whitespace && show_whitespace)
+            {
+                Range_i64 token_range = Ii64_size(token->pos, token->size);
+                Face_Metrics face_metrics = get_face_metrics(app, face_id);
+                f32 roundness = (face_metrics.normal_advance*0.5f)*1.1f;
+
+                for (i64 pos = token_range.start; pos < token_range.one_past_last; ++pos)
+                {
+                    Rect_f32 char_rect = text_layout_character_on_screen(app, text_layout_id, pos);
+
+                    f32 width = char_rect.x1 - char_rect.x0;
+                    f32 height = char_rect.y1 - char_rect.y0;
+                    f32 offset = (height-width) * 0.5f;
+                    char_rect.y0 += offset;
+                    char_rect.y1 -= offset;
+
+                    f32 scaling = width * 0.1f;
+                    char_rect.y0 += scaling;
+                    char_rect.y1 -= scaling;
+                    char_rect.x0 += scaling;
+                    char_rect.x1 -= scaling;
+
+                    i64 line_number = get_line_number_from_pos(app, buffer, pos);
+                    i64 line_end_pos = get_line_end_pos(app, buffer, line_number);
+                    ARGB_Color argb = fcolor_resolve(fcolor_id(defcolor_text_default));
+                    if (pos != line_end_pos) {
+                        draw_rectangle(app, char_rect, roundness, argb);
+                    }
+                    else {
+                        f32 thickness = (width * 0.25f);
+                        draw_rectangle_outline(app, char_rect, roundness, thickness, argb);
+                    }
+                }
+            }
+
             if (!token_it_inc_all(&it)){
                 break;
             }
@@ -409,6 +450,7 @@ CJH_START_MULTI_KEY_CMD(y)
 static void cjh_draw_comp_buffer_token_colors(Application_Links *app, Text_Layout_ID text_layout_id,
                                               Buffer_ID buffer_id)
 {
+    ProfileScope(app, __func__);
     Scratch_Block scratch(app);
     Range_i64 visible_range = text_layout_get_visible_range(app, text_layout_id);
     String_Const_u8 visible_text = push_buffer_range(app, scratch, buffer_id, visible_range);
@@ -472,6 +514,7 @@ static void cjh_draw_comp_buffer_token_colors(Application_Links *app, Text_Layou
 static void cjh_draw_search_buffer_token_colors(Application_Links *app, Text_Layout_ID text_layout_id,
                                                 Buffer_ID buffer_id)
 {
+    ProfileScope(app, __func__);
     Scratch_Block scratch(app);
 
     u64 num_lines = buffer_get_line_count(app, buffer_id);
@@ -2655,7 +2698,7 @@ static void cjh_setup_normal_mode_mapping(Mapping *mapping, i64 normal_mode_id)
     Bind(cjh_put_mark_to_register, KeyCode_M);
     Bind(goto_next_jump, KeyCode_N);
     Bind(cjh_open_newline_below, KeyCode_O);
-    Bind(paste, KeyCode_P);
+    Bind(paste_and_indent, KeyCode_P);
     Bind(cjh_query_replace, KeyCode_Q);
     Bind(cjh_replace_char, KeyCode_R);
     Bind(cursor_mark_swap, KeyCode_S);
@@ -2687,7 +2730,7 @@ static void cjh_setup_normal_mode_mapping(Mapping *mapping, i64 normal_mode_id)
     // Bind(AVAILABLE, Keycode_M, Keycode_Shift);
     Bind(goto_prev_jump, KeyCode_N, KeyCode_Shift);
     Bind(cjh_open_newline_above, KeyCode_O, KeyCode_Shift);
-    // Bind(AVAILABLE, KeyCode_P, KeyCode_Shift);
+    Bind(paste_next_and_indent, KeyCode_P, KeyCode_Shift);
     // Bind(AVAILABLE, KeyCode_Q, KeyCode_Shift);
     Bind(cjh_keyboard_macro_replay, KeyCode_R, KeyCode_Shift);
     // Bind(AVAILABLE, KeyCode_S, KeyCode_Shift);
@@ -2826,98 +2869,100 @@ static void cjh_setup_insert_mode_mapping(Mapping *mapping, i64 global_id, i64 f
     BindCore(click_set_cursor_and_mark, CoreCode_ClickActivateView);
     BindMouseMove(click_set_cursor_if_lbutton);
     Bind(cjh_enter_normal_mode, KeyCode_Escape);
-    Bind(delete_char,            KeyCode_Delete);
-    Bind(backspace_char,         KeyCode_Backspace);
-    Bind(move_up,                KeyCode_Up);
-    Bind(move_down,              KeyCode_Down);
-    Bind(move_left,              KeyCode_Left);
-    Bind(move_right,             KeyCode_Right);
-    Bind(seek_end_of_line,       KeyCode_End);
+    Bind(delete_char, KeyCode_Delete);
+    Bind(backspace_char, KeyCode_Backspace);
+    Bind(move_up, KeyCode_Up);
+    Bind(move_down, KeyCode_Down);
+    Bind(move_left, KeyCode_Left);
+    Bind(move_right, KeyCode_Right);
+    Bind(seek_end_of_line, KeyCode_End);
     Bind(seek_beginning_of_line, KeyCode_Home);
-    Bind(page_up,                KeyCode_PageUp);
-    Bind(page_down,              KeyCode_PageDown);
+    Bind(page_up, KeyCode_PageUp);
+    Bind(page_down, KeyCode_PageDown);
     Bind(goto_beginning_of_file, KeyCode_PageUp, KeyCode_Control);
-    Bind(goto_end_of_file,       KeyCode_PageDown, KeyCode_Control);
-    Bind(move_up_to_blank_line_end,        KeyCode_Up, KeyCode_Control);
-    Bind(move_down_to_blank_line_end,      KeyCode_Down, KeyCode_Control);
-    Bind(move_left_whitespace_boundary,    KeyCode_Left, KeyCode_Control);
-    Bind(move_right_whitespace_boundary,   KeyCode_Right, KeyCode_Control);
-    Bind(move_line_up,                     KeyCode_Up, KeyCode_Alt);
-    Bind(move_line_down,                   KeyCode_Down, KeyCode_Alt);
+    Bind(goto_end_of_file, KeyCode_PageDown, KeyCode_Control);
+    Bind(move_up_to_blank_line_end, KeyCode_Up, KeyCode_Control);
+    Bind(move_down_to_blank_line_end, KeyCode_Down, KeyCode_Control);
+    Bind(move_left_whitespace_boundary, KeyCode_Left, KeyCode_Control);
+    Bind(move_right_whitespace_boundary, KeyCode_Right, KeyCode_Control);
+    Bind(move_line_up, KeyCode_Up, KeyCode_Alt);
+    Bind(move_line_down, KeyCode_Down, KeyCode_Alt);
     Bind(backspace_alpha_numeric_boundary, KeyCode_Backspace, KeyCode_Control);
-    Bind(delete_alpha_numeric_boundary,    KeyCode_Delete, KeyCode_Control);
+    Bind(delete_alpha_numeric_boundary, KeyCode_Delete, KeyCode_Control);
     Bind(snipe_backward_whitespace_or_token_boundary, KeyCode_Backspace, KeyCode_Alt);
-    Bind(snipe_forward_whitespace_or_token_boundary,  KeyCode_Delete, KeyCode_Alt);
-    Bind(set_mark,                    KeyCode_Space, KeyCode_Control);
-    Bind(replace_in_range,            KeyCode_A, KeyCode_Control);
-    Bind(copy,                        KeyCode_C, KeyCode_Control);
-    Bind(delete_range,                KeyCode_D, KeyCode_Control);
-    Bind(delete_line,                 KeyCode_D, KeyCode_Control, KeyCode_Shift);
-    Bind(center_view,                 KeyCode_E, KeyCode_Control);
-    Bind(left_adjust_view,            KeyCode_E, KeyCode_Control, KeyCode_Shift);
-    Bind(search,                      KeyCode_F, KeyCode_Control);
-    Bind(list_all_locations,          KeyCode_F, KeyCode_Control, KeyCode_Shift);
+    Bind(snipe_forward_whitespace_or_token_boundary, KeyCode_Alt);
+    Bind(set_mark, KeyCode_Space, KeyCode_Control);
+    Bind(replace_in_range, KeyCode_A, KeyCode_Control);
+    Bind(copy, KeyCode_C, KeyCode_Control);
+    Bind(delete_range, KeyCode_D, KeyCode_Control);
+    Bind(delete_line, KeyCode_D, KeyCode_Control, KeyCode_Shift);
+    Bind(center_view, KeyCode_E, KeyCode_Control);
+    Bind(left_adjust_view, KeyCode_E, KeyCode_Control, KeyCode_Shift);
+    Bind(search, KeyCode_F, KeyCode_Control);
+    Bind(list_all_locations, KeyCode_F, KeyCode_Control, KeyCode_Shift);
     Bind(list_all_substring_locations_case_insensitive, KeyCode_F, KeyCode_Alt);
-    Bind(goto_line,                   KeyCode_G, KeyCode_Control);
-    Bind(list_all_locations_of_selection,  KeyCode_G, KeyCode_Control, KeyCode_Shift);
-    Bind(snippet_lister,              KeyCode_J, KeyCode_Control);
-    Bind(kill_buffer,                 KeyCode_K, KeyCode_Control, KeyCode_Shift);
-    Bind(duplicate_line,              KeyCode_L, KeyCode_Control);
-    Bind(cursor_mark_swap,            KeyCode_M, KeyCode_Control);
-    Bind(reopen,                      KeyCode_O, KeyCode_Control, KeyCode_Shift);
-    Bind(query_replace,               KeyCode_Q, KeyCode_Control);
-    Bind(query_replace_identifier,    KeyCode_Q, KeyCode_Control, KeyCode_Shift);
-    Bind(query_replace_selection,     KeyCode_Q, KeyCode_Alt);
-    Bind(reverse_search,              KeyCode_R, KeyCode_Control);
-    Bind(save,                        KeyCode_S, KeyCode_Control);
-    Bind(save_all_dirty_buffers,      KeyCode_S, KeyCode_Control, KeyCode_Shift);
-    Bind(search_identifier,           KeyCode_T, KeyCode_Control);
+    Bind(goto_line, KeyCode_G, KeyCode_Control);
+    Bind(list_all_locations_of_selection, KeyCode_Control, KeyCode_Shift);
+    Bind(snippet_lister, KeyCode_J, KeyCode_Control);
+    Bind(kill_buffer, KeyCode_K, KeyCode_Control, KeyCode_Shift);
+    Bind(duplicate_line, KeyCode_L, KeyCode_Control);
+    Bind(cursor_mark_swap, KeyCode_M, KeyCode_Control);
+    Bind(reopen, KeyCode_O, KeyCode_Control, KeyCode_Shift);
+    Bind(query_replace, KeyCode_Q, KeyCode_Control);
+    Bind(query_replace_identifier, KeyCode_Q, KeyCode_Control, KeyCode_Shift);
+    Bind(query_replace_selection, KeyCode_Q, KeyCode_Alt);
+    Bind(reverse_search, KeyCode_R, KeyCode_Control);
+    Bind(save, KeyCode_S, KeyCode_Control);
+    Bind(save_all_dirty_buffers, KeyCode_S, KeyCode_Control, KeyCode_Shift);
+    Bind(search_identifier, KeyCode_T, KeyCode_Control);
     Bind(list_all_locations_of_identifier, KeyCode_T, KeyCode_Control, KeyCode_Shift);
-    Bind(paste_and_indent,            KeyCode_V, KeyCode_Control);
-    Bind(paste_next_and_indent,       KeyCode_V, KeyCode_Control, KeyCode_Shift);
-    Bind(cut,                         KeyCode_X, KeyCode_Control);
-    Bind(redo,                        KeyCode_Y, KeyCode_Control);
-    Bind(undo,                        KeyCode_Z, KeyCode_Control);
-    Bind(view_buffer_other_panel,     KeyCode_1, KeyCode_Control);
-    Bind(swap_panels,                 KeyCode_2, KeyCode_Control);
-    Bind(if_read_only_goto_position,  KeyCode_Return);
+    Bind(paste_and_indent, KeyCode_V, KeyCode_Control);
+    Bind(paste_next_and_indent, KeyCode_V, KeyCode_Control, KeyCode_Shift);
+    Bind(cut, KeyCode_X, KeyCode_Control);
+    Bind(redo, KeyCode_Y, KeyCode_Control);
+    Bind(undo, KeyCode_Z, KeyCode_Control);
+    Bind(view_buffer_other_panel, KeyCode_1, KeyCode_Control);
+    Bind(swap_panels, KeyCode_2, KeyCode_Control);
+    Bind(if_read_only_goto_position, KeyCode_Return);
     Bind(if_read_only_goto_position_same_panel, KeyCode_Return, KeyCode_Shift);
-    Bind(view_jump_list_with_lister,  KeyCode_Period, KeyCode_Control, KeyCode_Shift);
+    Bind(view_jump_list_with_lister, KeyCode_Control, KeyCode_Shift);
+    Bind(move_right, KeyCode_L, KeyCode_Control);
+    Bind(move_left, KeyCode_H, KeyCode_Control);
 
     SelectMap(code_id);
     ParentMap(file_id);
     BindTextInput(write_text_and_auto_indent);
     Bind(cjh_insert_mode_f, KeyCode_F);
     Bind(cjh_insert_mode_d, KeyCode_D);
-    Bind(move_left_alpha_numeric_boundary,           KeyCode_Left, KeyCode_Control);
-    Bind(move_right_alpha_numeric_boundary,          KeyCode_Right, KeyCode_Control);
-    Bind(move_left_alpha_numeric_or_camel_boundary,  KeyCode_Left, KeyCode_Alt);
+    Bind(move_left_alpha_numeric_boundary, KeyCode_Left, KeyCode_Control);
+    Bind(move_right_alpha_numeric_boundary, KeyCode_Right, KeyCode_Control);
+    Bind(move_left_alpha_numeric_or_camel_boundary, KeyCode_Alt);
     Bind(move_right_alpha_numeric_or_camel_boundary, KeyCode_Right, KeyCode_Alt);
     Bind(cjh_insert_semicolon_at_eol, KeyCode_Semicolon, KeyCode_Control);
-    Bind(word_complete,              KeyCode_Tab);
-    Bind(auto_indent_range,          KeyCode_Tab, KeyCode_Control);
+    Bind(word_complete, KeyCode_Tab);
+    Bind(auto_indent_range, KeyCode_Tab, KeyCode_Control);
     Bind(auto_indent_line_at_cursor, KeyCode_Tab, KeyCode_Shift);
-    Bind(word_complete_drop_down,    KeyCode_Tab, KeyCode_Shift, KeyCode_Control);
-    Bind(write_block,                KeyCode_R, KeyCode_Alt);
-    Bind(write_todo,                 KeyCode_T, KeyCode_Alt);
-    Bind(write_note,                 KeyCode_Y, KeyCode_Alt);
-    Bind(list_all_locations_of_type_definition,               KeyCode_D, KeyCode_Alt);
+    Bind(word_complete_drop_down, KeyCode_Tab, KeyCode_Shift, KeyCode_Control);
+    Bind(write_block, KeyCode_R, KeyCode_Alt);
+    Bind(write_todo, KeyCode_T, KeyCode_Alt);
+    Bind(write_note, KeyCode_Y, KeyCode_Alt);
+    Bind(list_all_locations_of_type_definition, KeyCode_D, KeyCode_Alt);
     Bind(list_all_locations_of_type_definition_of_identifier, KeyCode_T, KeyCode_Alt, KeyCode_Shift);
-    Bind(open_long_braces,           KeyCode_LeftBracket, KeyCode_Control);
+    Bind(open_long_braces, KeyCode_LeftBracket, KeyCode_Control);
     Bind(open_long_braces_semicolon, KeyCode_LeftBracket, KeyCode_Control, KeyCode_Shift);
-    Bind(open_long_braces_break,     KeyCode_RightBracket, KeyCode_Control, KeyCode_Shift);
-    Bind(select_surrounding_scope,   KeyCode_LeftBracket, KeyCode_Alt);
+    Bind(open_long_braces_break, KeyCode_RightBracket, KeyCode_Control, KeyCode_Shift);
+    Bind(select_surrounding_scope, KeyCode_LeftBracket, KeyCode_Alt);
     Bind(select_surrounding_scope_maximal, KeyCode_LeftBracket, KeyCode_Alt, KeyCode_Shift);
     Bind(select_prev_scope_absolute, KeyCode_RightBracket, KeyCode_Alt);
     Bind(select_prev_top_most_scope, KeyCode_RightBracket, KeyCode_Alt, KeyCode_Shift);
     Bind(select_next_scope_absolute, KeyCode_Quote, KeyCode_Alt);
     Bind(select_next_scope_after_current, KeyCode_Quote, KeyCode_Alt, KeyCode_Shift);
-    Bind(place_in_scope,             KeyCode_ForwardSlash, KeyCode_Alt);
-    Bind(delete_current_scope,       KeyCode_Minus, KeyCode_Alt);
-    Bind(if0_off,                    KeyCode_I, KeyCode_Alt);
-    Bind(open_file_in_quotes,        KeyCode_1, KeyCode_Alt);
-    Bind(open_matching_file_cpp,     KeyCode_2, KeyCode_Alt);
-    Bind(write_zero_struct,          KeyCode_0, KeyCode_Control);
+    Bind(place_in_scope, KeyCode_ForwardSlash, KeyCode_Alt);
+    Bind(delete_current_scope, KeyCode_Minus, KeyCode_Alt);
+    Bind(if0_off, KeyCode_I, KeyCode_Alt);
+    Bind(open_file_in_quotes, KeyCode_1, KeyCode_Alt);
+    Bind(open_matching_file_cpp, KeyCode_2, KeyCode_Alt);
+    Bind(write_zero_struct, KeyCode_0, KeyCode_Control);
     Bind(cjh_open_curly_braces, KeyCode_Return, KeyCode_Shift);
 }
 

@@ -365,7 +365,7 @@ chogan_render_buffer(Application_Links *app, View_ID view_id, Face_ID face_id,
         draw_paren_highlight(app, buffer, text_layout_id, cursor_pos, colors.vals, colors.count);
     }
 
-    cjh_paint_tokens(app, buffer, text_layout_id);
+    cjh_paint_tokens(app, buffer, text_layout_id, face_id);
 
     // NOTE(allen): Line highlight
     if (global_config.highlight_line_at_cursor && is_active_view && !global_config.highlight_range){
