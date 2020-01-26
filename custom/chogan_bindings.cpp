@@ -5,9 +5,9 @@
 // TODO(chogan): Missing functionality
 // - Layouts/workspaces
 // - [[ or gp (use code index)
-// - (ydc) i (w(["'a)
+// - (ydc) i w(["'a
 // - surround with ("[{' (enclose_pos)
-// - cjh_fill_paragraph
+// - fill_paragraph
 // - C-v mode
 
 // TODO(chogan): Enhancements
@@ -21,6 +21,7 @@
 // - How to handle inserting () [] ""?
 // - / in visual line mode makes fugly comments
 // - don't insert whitespace on blank lines
+// - d s/S to delete whitespace forward/backward
 
 // TODO(chogan): Theme
 // - Syntax highlighting for variable defs, enums, args
@@ -2869,29 +2870,29 @@ static void cjh_setup_insert_mode_mapping(Mapping *mapping, i64 global_id, i64 f
     BindCore(cjh_try_exit, CoreCode_TryExit);
 
     // Default global
-    Bind(keyboard_macro_start_recording , KeyCode_U, KeyCode_Control);
+    Bind(keyboard_macro_start_recording, KeyCode_U, KeyCode_Control);
     Bind(keyboard_macro_finish_recording, KeyCode_U, KeyCode_Control, KeyCode_Shift);
-    Bind(keyboard_macro_replay,           KeyCode_U, KeyCode_Alt);
-    Bind(change_active_panel,           KeyCode_Comma, KeyCode_Control);
+    Bind(keyboard_macro_replay, KeyCode_U, KeyCode_Alt);
+    Bind(change_active_panel, KeyCode_Comma, KeyCode_Control);
     Bind(change_active_panel_backwards, KeyCode_Comma, KeyCode_Control, KeyCode_Shift);
-    Bind(interactive_new,               KeyCode_N, KeyCode_Control);
-    Bind(interactive_open_or_new,       KeyCode_O, KeyCode_Control);
-    Bind(open_in_other,                 KeyCode_O, KeyCode_Alt);
-    Bind(interactive_kill_buffer,       KeyCode_K, KeyCode_Control);
-    Bind(interactive_switch_buffer,     KeyCode_I, KeyCode_Control);
-    Bind(project_go_to_root_directory,  KeyCode_H, KeyCode_Control);
-    Bind(save_all_dirty_buffers,        KeyCode_S, KeyCode_Control, KeyCode_Shift);
-    Bind(change_to_build_panel,         KeyCode_Period, KeyCode_Alt);
-    Bind(close_build_panel,             KeyCode_Comma, KeyCode_Alt);
-    Bind(goto_next_jump,                KeyCode_N, KeyCode_Alt);
-    Bind(goto_prev_jump,                KeyCode_N, KeyCode_Alt, KeyCode_Shift);
-    Bind(build_in_build_panel,          KeyCode_M, KeyCode_Alt);
-    Bind(goto_first_jump,               KeyCode_M, KeyCode_Alt, KeyCode_Shift);
-    Bind(toggle_filebar,                KeyCode_B, KeyCode_Alt);
-    Bind(execute_any_cli,               KeyCode_Z, KeyCode_Alt);
-    Bind(execute_previous_cli,          KeyCode_Z, KeyCode_Alt, KeyCode_Shift);
-    Bind(command_lister,                KeyCode_X, KeyCode_Alt);
-    Bind(project_command_lister,        KeyCode_X, KeyCode_Alt, KeyCode_Shift);
+    Bind(interactive_new, KeyCode_N, KeyCode_Control);
+    Bind(interactive_open_or_new, KeyCode_O, KeyCode_Control);
+    Bind(open_in_other, KeyCode_O, KeyCode_Alt);
+    Bind(interactive_kill_buffer, KeyCode_K, KeyCode_Control);
+    Bind(interactive_switch_buffer, KeyCode_I, KeyCode_Control);
+    Bind(project_go_to_root_directory, KeyCode_H, KeyCode_Control);
+    Bind(save_all_dirty_buffers, KeyCode_S, KeyCode_Control, KeyCode_Shift);
+    Bind(change_to_build_panel, KeyCode_Period, KeyCode_Alt);
+    Bind(close_build_panel, KeyCode_Comma, KeyCode_Alt);
+    Bind(goto_next_jump, KeyCode_N, KeyCode_Alt);
+    Bind(goto_prev_jump, KeyCode_N, KeyCode_Alt, KeyCode_Shift);
+    Bind(build_in_build_panel, KeyCode_M, KeyCode_Alt);
+    Bind(goto_first_jump, KeyCode_M, KeyCode_Alt, KeyCode_Shift);
+    Bind(toggle_filebar, KeyCode_B, KeyCode_Alt);
+    Bind(execute_any_cli, KeyCode_Z, KeyCode_Alt);
+    Bind(execute_previous_cli, KeyCode_Z, KeyCode_Alt, KeyCode_Shift);
+    Bind(command_lister, KeyCode_X, KeyCode_Alt);
+    Bind(project_command_lister, KeyCode_X, KeyCode_Alt, KeyCode_Shift);
     Bind(list_all_functions_current_buffer, KeyCode_I, KeyCode_Control, KeyCode_Shift);
     Bind(project_fkey_command, KeyCode_F1);
     Bind(project_fkey_command, KeyCode_F2);
@@ -2909,7 +2910,7 @@ static void cjh_setup_insert_mode_mapping(Mapping *mapping, i64 global_id, i64 f
     Bind(project_fkey_command, KeyCode_F14);
     Bind(project_fkey_command, KeyCode_F15);
     Bind(project_fkey_command, KeyCode_F16);
-    Bind(exit_4coder,          KeyCode_F4, KeyCode_Alt);
+    Bind(exit_4coder, KeyCode_F4, KeyCode_Alt);
     BindMouseWheel(mouse_wheel_scroll);
     BindMouseWheel(mouse_wheel_change_face_size, KeyCode_Control);
 
