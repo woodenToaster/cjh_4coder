@@ -32,14 +32,11 @@
 // - Change jump list highlight
 
 // TODO(chogan): Bugs
-// - 'a' should never go to the next line
-// - Cursor should not move after paste
-// - e and b don't work in comments
-// - (delete | yank) paste in visual line mode cuts off an extra character
-// - d w deletes two words
+// - y w moves cursor
+// - d w occasionally deletes two words
 // - SPC w hl don't work exactly right
+// - e and b don't work in comments
 // - Visual mode highlights regions in both visible buffers
-// - SPC / will occasionally not jump to line
 
 #if !defined(FCODER_CHOGAN_BINDINGS_CPP)
 #define FCODER_CHOGAN_BINDINGS_CPP
@@ -85,21 +82,6 @@ struct CjhMultiKeyCmdHooks
     CjhMultiKeyCmdHook *cjh_window_hook;
     CjhMultiKeyCmdHook *cjh_y_hook;
 };
-
-static void cjh_buffer_hook();
-static void *cjh_c_hook();
-static void *cjh_comma_hook();
-static void *cjh_d_hook();
-static void *cjh_file_hook();
-static void *cjh_g_hook();
-static void *cjh_help_hook();
-static void *cjh_macro_hook();
-static void *cjh_quit_hook();
-static void *cjh_space_hook();
-static void *cjh_snippet_hook();
-static void *cjh_toggle_hook();
-static void *cjh_window_hook();
-static void *cjh_y_hook();
 
 static u8 cjh_last_f_search;
 static bool cjh_last_find_was_til;
@@ -184,7 +166,7 @@ CUSTOM_COMMAND_SIG(cjh_pop_mark)
 
 // Forward declarations
 static void cjh_set_command_map(Application_Links *app, Command_Map_ID new_mapid);
-static void cjh_write_key_to_status_panel(Application_Links *app);
+static void cjh_write_key_to_status_panel(Application_Links *app, String_Const_u8 *optional=0);
 
 static void cjh_toggle_highlight_range()
 {
@@ -968,7 +950,14 @@ static void cjh_draw_cursor_mark_highlight(Application_Links *app, View_ID view_
 
 CUSTOM_COMMAND_SIG(cjh_move_right_and_enter_insert_mode)
 {
-    move_right(app);
+    View_ID view = get_active_view(app, Access_Always);
+    Buffer_ID buffer = view_get_buffer(app, view, Access_Always);
+    i64 pos = view_get_cursor_pos(app, view);
+    char c = buffer_get_char(app, buffer, pos);
+    if (c != '\n')
+    {
+        move_right(app);
+    }
     cjh_enter_insert_mode(app);
 }
 
@@ -1005,7 +994,7 @@ static Buffer_ID cjh_get_or_create_buffer(Application_Links *app, Buffer_Identif
     return(result);
 }
 
-static void cjh_write_key_to_status_panel(Application_Links *app)
+static void cjh_write_key_to_status_panel(Application_Links *app, String_Const_u8 *optional)
 {
     View_ID saved_view = get_active_view(app, Access_Always);
     View_ID status_view = cjh_get_or_open_status_panel(app);
@@ -1013,9 +1002,16 @@ static void cjh_write_key_to_status_panel(Application_Links *app)
     view_set_buffer(app, status_view, status_buffer, 0);
     view_set_active(app, status_view);
 
-    User_Input in = get_current_input(app);
-    char *key_name = key_code_name[in.event.key.code];
-    write_text(app, SCu8(key_name));
+    if (optional)
+    {
+        write_text(app, *optional);
+    }
+    else
+    {
+        User_Input in = get_current_input(app);
+        char *key_name = key_code_name[in.event.key.code];
+        write_text(app, SCu8(key_name));
+    }
     write_text(app, SCu8(" "));
     view_set_active(app, saved_view);
 }
@@ -1774,7 +1770,9 @@ CUSTOM_COMMAND_SIG(cjh_visual_line_mode_yank)
 {
     View_ID view = get_active_view(app, Access_ReadWrite);
     Buffer_ID buffer = view_get_buffer(app, view, Access_ReadWrite);
-    clipboard_post_buffer_range(app, 0, buffer, cjh_visual_line_mode_range);
+    Range_i64 yank_range = cjh_visual_line_mode_range;
+    yank_range.end += 1;
+    clipboard_post_buffer_range(app, 0, buffer, yank_range);
     cjh_enter_normal_mode(app);
 }
 
@@ -1962,6 +1960,7 @@ static void cjh_interactive_search_project_ag_internal(Application_Links *app, S
         if (match_key_code(&in, KeyCode_Return))
         {
             Scratch_Block scratch(app);
+            search_buffer = buffer_identifier_to_id(app, search_identifier);
             String_Const_u8 text = push_buffer_range(app, scratch, search_buffer, buffer_range(app, search_buffer));
             List_String_Const_u8 lines = string_split(scratch, text, SCu8("\n").str, 1);
             u64 line = 1;
@@ -1976,6 +1975,7 @@ static void cjh_interactive_search_project_ag_internal(Application_Links *app, S
                     i64 one_past_end_of_filename = string_find_first(node->string, 0, ':');
                     filename.size = one_past_end_of_filename;
 
+                    project_go_to_root_directory(app);
                     String_Const_u8 hot_dir = push_hot_directory(app, scratch);
                     String_u8 full_filename = Su8(hot_dir.str, hot_dir.size, hot_dir.size + filename.size);
                     string_append(&full_filename, filename);
@@ -1989,6 +1989,8 @@ static void cjh_interactive_search_project_ag_internal(Application_Links *app, S
                                                                one_past_line_number - (filename.size + 1));
                         u64 line_number = string_to_integer(line_number_str, 10);
 
+                        Buffer_ID current_buffer = view_get_buffer(app, view, Access_Always);
+                        cjh_last_buffer = current_buffer;
                         view_set_buffer(app, view, new_buffer, 0);
                         view_set_cursor(app, view, seek_line_col(line_number, 0));
                         cjh_push_mark(app);
@@ -2002,17 +2004,25 @@ static void cjh_interactive_search_project_ag_internal(Application_Links *app, S
         }
         else if (match_key_code(&in, KeyCode_Backspace))
         {
-            // TODO(cjh): Check for alt for word backspace
+            if (has_modifier(&in.event.key.modifiers, KeyCode_Alt))
+            {
+                bar.string.size = 0;
+                ag.size = ag_cmd_size;
+            }
+            else
+            {
+                if (bar.string.size > 0)
+                {
+                    bar.string.size--;
+                }
+                if (ag.size > ag_cmd_size)
+                {
+                    ag.size--;
+                }
+
+            }
             string_change = true;
             backspace = true;
-            if (bar.string.size > 0)
-            {
-                bar.string.size--;
-            }
-            if (ag.size > ag_cmd_size)
-            {
-                ag.size--;
-            }
         }
         else if (match_key_code(&in, KeyCode_J) && has_modifier(&in.event.key.modifiers, KeyCode_Control))
         {
@@ -2636,6 +2646,7 @@ CUSTOM_COMMAND_SIG(cjh_combine_lines)
 
 CUSTOM_COMMAND_SIG(cjh_put_mark_to_register)
 {
+    cjh_write_key_to_status_panel(app);
     char reg = cjh_get_char_from_user(app);
     if (reg >= 'a' && reg <= 'z')
     {
@@ -2647,10 +2658,13 @@ CUSTOM_COMMAND_SIG(cjh_put_mark_to_register)
         mark->pos = pos;
         mark->buffer = buffer;
     }
+    cjh_enter_normal_mode(app);
 }
 
 CUSTOM_COMMAND_SIG(cjh_jump_to_register)
 {
+    String_Const_u8 prompt = SCu8("Goto register: ");
+    cjh_write_key_to_status_panel(app, &prompt);
     cjh_push_mark(app);
     char reg = cjh_get_char_from_user(app);
     if (reg >= 'a' && reg <= 'z')
@@ -2661,6 +2675,14 @@ CUSTOM_COMMAND_SIG(cjh_jump_to_register)
         view_set_buffer(app, view, mark->buffer, 0);
         view_set_cursor(app, view, seek_pos(mark->pos));
     }
+    cjh_enter_normal_mode(app);
+}
+
+CUSTOM_COMMAND_SIG(cjh_paste_and_indent)
+{
+    set_mark(app);
+    paste_and_indent(app);
+    cursor_mark_swap(app);
 }
 
 CJH_COMMAND_AND_ENTER_NORMAL_MODE(keyboard_macro_replay)
@@ -2698,7 +2720,7 @@ static void cjh_setup_normal_mode_mapping(Mapping *mapping, i64 normal_mode_id)
     Bind(cjh_put_mark_to_register, KeyCode_M);
     Bind(goto_next_jump, KeyCode_N);
     Bind(cjh_open_newline_below, KeyCode_O);
-    Bind(paste_and_indent, KeyCode_P);
+    Bind(cjh_paste_and_indent, KeyCode_P);
     Bind(cjh_query_replace, KeyCode_Q);
     Bind(cjh_replace_char, KeyCode_R);
     Bind(cursor_mark_swap, KeyCode_S);
@@ -2709,10 +2731,6 @@ static void cjh_setup_normal_mode_mapping(Mapping *mapping, i64 normal_mode_id)
     Bind(delete_char, KeyCode_X);
     Bind(cjh_start_multi_key_cmd_y, KeyCode_Y);
     // Bind(AVAILABLE, KeyCode_Z);
-
-    Bind(cjh_start_multi_key_cmd_space, KeyCode_Space);
-    Bind(cjh_start_multi_key_cmd_comma, KeyCode_Comma);
-    Bind(auto_indent_line_at_cursor, KeyCode_Tab);
 
     // A-Z
     Bind(cjh_eol_insert, KeyCode_A, KeyCode_Shift);
@@ -2758,8 +2776,8 @@ static void cjh_setup_normal_mode_mapping(Mapping *mapping, i64 normal_mode_id)
     Bind(cjh_search_identifier_forward, KeyCode_8, KeyCode_Shift);
     // (
     // )
-    // _
-    // +
+    Bind(move_line_up, KeyCode_Minus, KeyCode_Shift);
+    Bind(move_line_down, KeyCode_Equal, KeyCode_Shift);
     // |
     // "
     // <
@@ -2768,16 +2786,17 @@ static void cjh_setup_normal_mode_mapping(Mapping *mapping, i64 normal_mode_id)
     // :
 
     // Special characters
-    Bind(cjh_jump_to_register, KeyCode_Quote);
     // `
     // -
     // =
     // backslash
-
+    Bind(cjh_jump_to_register, KeyCode_Quote);
     Bind(cjh_search_forward, KeyCode_ForwardSlash);
     Bind(cjh_repeat_last_find_cmd, KeyCode_Semicolon);
-    // Bind(cjh_goto_mark, KeyCode_Quote);
     Bind(cjh_repeat_last_command, KeyCode_Period);
+    Bind(cjh_start_multi_key_cmd_space, KeyCode_Space);
+    Bind(cjh_start_multi_key_cmd_comma, KeyCode_Comma);
+    Bind(auto_indent_line_at_cursor, KeyCode_Tab);
 
     // Control modifier
     Bind(page_down, KeyCode_D, KeyCode_Control);
@@ -2936,7 +2955,7 @@ static void cjh_setup_insert_mode_mapping(Mapping *mapping, i64 global_id, i64 f
     Bind(cjh_insert_mode_d, KeyCode_D);
     Bind(move_left_alpha_numeric_boundary, KeyCode_Left, KeyCode_Control);
     Bind(move_right_alpha_numeric_boundary, KeyCode_Right, KeyCode_Control);
-    Bind(move_left_alpha_numeric_or_camel_boundary, KeyCode_Alt);
+    Bind(move_left_alpha_numeric_or_camel_boundary, KeyCode_Left, KeyCode_Alt);
     Bind(move_right_alpha_numeric_or_camel_boundary, KeyCode_Right, KeyCode_Alt);
     Bind(cjh_insert_semicolon_at_eol, KeyCode_Semicolon, KeyCode_Control);
     Bind(word_complete, KeyCode_Tab);
