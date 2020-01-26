@@ -20,6 +20,7 @@ text = 0xffd5c4a1;
 highlight = 0xff504945;
 todo = 0xffd75f87;
 magenta = 0xffff00ff;
+turquoise = 0xff5fafaf;
 
 defcolor_back = bg0_s;
 defcolor_margin = 0xFF212026;
@@ -66,5 +67,5 @@ defcolor_pop2 = 0xFFFF0000; // Not modified
 defcolor_back_cycle = {0x0CA00000, 0x0800A000, 0x080000A0, 0x08A0A000};
 // NOTE(cjh): Coloring parens
 defcolor_text_cycle = {blue, aqua, yellow, red};
-defcolor_trailing_whitespace = magenta;
+defcolor_trailing_whitespace = turquoise;
 
