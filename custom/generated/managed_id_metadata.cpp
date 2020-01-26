@@ -41,6 +41,7 @@ defcolor_back_cycle = managed_id_declare(app, string_u8_litexpr("colors"), strin
 defcolor_text_cycle = managed_id_declare(app, string_u8_litexpr("colors"), string_u8_litexpr("defcolor_text_cycle"));
 defcolor_line_numbers_back = managed_id_declare(app, string_u8_litexpr("colors"), string_u8_litexpr("defcolor_line_numbers_back"));
 defcolor_line_numbers_text = managed_id_declare(app, string_u8_litexpr("colors"), string_u8_litexpr("defcolor_line_numbers_text"));
+defcolor_trailing_whitespace = managed_id_declare(app, string_u8_litexpr("colors"), string_u8_litexpr("defcolor_trailing_whitespace"));
 view_rewrite_loc = managed_id_declare(app, string_u8_litexpr("attachment"), string_u8_litexpr("view_rewrite_loc"));
 view_next_rewrite_loc = managed_id_declare(app, string_u8_litexpr("attachment"), string_u8_litexpr("view_next_rewrite_loc"));
 view_paste_index_loc = managed_id_declare(app, string_u8_litexpr("attachment"), string_u8_litexpr("view_paste_index_loc"));

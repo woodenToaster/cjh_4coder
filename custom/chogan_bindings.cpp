@@ -8,19 +8,19 @@
 // - (ydc) i (w(["'a)
 // - surround with ("[{' (enclose_pos)
 // - cjh_fill_paragraph
-// - Show trailing whitespace
 // - C-v mode
 
 // TODO(chogan): Enhancements
 // - Alt-p to populate search bar with search history
 // - Vim style search in buffer
 // - Jump to panel by number (" w1", " w3", etc.)
-// - Keep minibuffer open for displaying messages?
 // - remove fd from undo buffer
 // - g d on variables
 // - % to jump to matching ["'
 // - Look into batch edits to make undo and . nicer
 // - How to handle inserting () [] ""?
+// - / in visual line mode makes fugly comments
+// - don't insert whitespace on blank lines
 
 // TODO(chogan): Theme
 // - Syntax highlighting for variable defs, enums, args
@@ -32,11 +32,12 @@
 // - Change jump list highlight
 
 // TODO(chogan): Bugs
-// - y w moves cursor
 // - d w occasionally deletes two words
-// - SPC w hl don't work exactly right
+// - SPC w h/l don't work exactly right
 // - e and b don't work in comments
 // - Visual mode highlights regions in both visible buffers
+// - Indent region in visual line mode
+// - visual line mode d leaves emplty lines
 
 #if !defined(FCODER_CHOGAN_BINDINGS_CPP)
 #define FCODER_CHOGAN_BINDINGS_CPP
@@ -251,23 +252,21 @@ static void cjh_paint_tokens(Application_Links *app, Buffer_ID buffer, Text_Layo
                 break;
             }
             // TODO(stefan): hack
-            b32 valid = true;
-            if(token->sub_kind == TokenCppKind_Dot){
-                token_it_inc_all(&it);
-                Token *peek = token_it_read(&it);
-                String_Const_u8 token_as_string = push_token_lexeme(app, scratch, buffer, token);
-                if(peek->kind == TokenBaseKind_Identifier &&
-                   peek->sub_kind == TokenCppKind_Identifier){
-                    //token_it_dec_all(&it);
-                    valid = false;
-                }
-            }
+            // b32 valid = true;
+            // if(token->sub_kind == TokenCppKind_Dot){
+                // token_it_inc_all(&it);
+                // Token *peek = token_it_read(&it);
+                // String_Const_u8 token_as_string = push_token_lexeme(app, scratch, buffer, token);
+                // if(peek->kind == TokenBaseKind_Identifier &&
+                   // peek->sub_kind == TokenCppKind_Identifier){
+                    // token_it_dec_all(&it);
+                    // valid = false;
+                // }
+            // }
 
             if (token->kind == TokenBaseKind_Identifier &&
-                token->sub_kind == TokenCppKind_Identifier &&
-                valid)
+                    token->sub_kind == TokenCppKind_Identifier) // && valid)
             {
-
                 String_Const_u8 token_as_string = push_token_lexeme(app, scratch, buffer, token);
 
                 for(Buffer_ID buf = get_buffer_next(app, 0, Access_Always);
@@ -320,37 +319,72 @@ static void cjh_paint_tokens(Application_Links *app, Buffer_ID buffer, Text_Layo
                     }
                 }
             }
-            else if (token->kind == TokenBaseKind_Whitespace && show_whitespace)
+            else if (token->kind == TokenBaseKind_Whitespace)
             {
-                Range_i64 token_range = Ii64_size(token->pos, token->size);
-                Face_Metrics face_metrics = get_face_metrics(app, face_id);
-                f32 roundness = (face_metrics.normal_advance*0.5f)*1.1f;
-
-                for (i64 pos = token_range.start; pos < token_range.one_past_last; ++pos)
+                if (show_whitespace)
                 {
-                    Rect_f32 char_rect = text_layout_character_on_screen(app, text_layout_id, pos);
+                    Range_i64 token_range = Ii64_size(token->pos, token->size);
+                    Face_Metrics face_metrics = get_face_metrics(app, face_id);
+                    f32 roundness = (face_metrics.normal_advance*0.5f)*1.1f;
 
-                    f32 width = char_rect.x1 - char_rect.x0;
-                    f32 height = char_rect.y1 - char_rect.y0;
-                    f32 offset = (height-width) * 0.5f;
-                    char_rect.y0 += offset;
-                    char_rect.y1 -= offset;
+                    for (i64 pos = token_range.start; pos < token_range.one_past_last; ++pos)
+                    {
+                        Rect_f32 char_rect = text_layout_character_on_screen(app, text_layout_id, pos);
 
-                    f32 scaling = width * 0.1f;
-                    char_rect.y0 += scaling;
-                    char_rect.y1 -= scaling;
-                    char_rect.x0 += scaling;
-                    char_rect.x1 -= scaling;
+                        f32 width = char_rect.x1 - char_rect.x0;
+                        f32 height = char_rect.y1 - char_rect.y0;
+                        f32 offset = (height-width) * 0.5f;
+                        char_rect.y0 += offset;
+                        char_rect.y1 -= offset;
 
-                    i64 line_number = get_line_number_from_pos(app, buffer, pos);
-                    i64 line_end_pos = get_line_end_pos(app, buffer, line_number);
-                    ARGB_Color argb = fcolor_resolve(fcolor_id(defcolor_text_default));
-                    if (pos != line_end_pos) {
-                        draw_rectangle(app, char_rect, roundness, argb);
+                        f32 scaling = width * 0.1f;
+                        char_rect.y0 += scaling;
+                        char_rect.y1 -= scaling;
+                        char_rect.x0 += scaling;
+                        char_rect.x1 -= scaling;
+
+                        i64 line_number = get_line_number_from_pos(app, buffer, pos);
+                        i64 line_end_pos = get_line_end_pos(app, buffer, line_number);
+                        ARGB_Color argb = fcolor_resolve(fcolor_id(defcolor_text_default));
+                        if (pos != line_end_pos) {
+                            // TODO(chogan): Draw tabs and spaces differently
+                            draw_rectangle(app, char_rect, roundness, argb);
+                        }
+                        else {
+                            f32 thickness = (width * 0.25f);
+                            draw_rectangle_outline(app, char_rect, roundness, thickness, argb);
+                        }
                     }
-                    else {
-                        f32 thickness = (width * 0.25f);
-                        draw_rectangle_outline(app, char_rect, roundness, thickness, argb);
+                }
+                else
+                {
+                    // NOTE(chogan): Highlight trailing whitespace
+                    String_Const_u8 token_as_string = push_token_lexeme(app, scratch, buffer, token);
+                    Range_i64 token_range = Ii64_size(token->pos, token->size);
+                    Rect_f32 whitespace_rect = {};
+                    bool have_trailing_whitespace = false;
+
+                    if (token_as_string.str[token_as_string.size - 1] == '\n')
+                    {
+                        for (i64 pos = token_range.start, i = 0;
+                             pos < token_range.one_past_last;
+                             ++pos, ++i)
+                        {
+                            char current_char = token_as_string.str[i];
+                            Rect_f32 char_rect = text_layout_character_on_screen(app, text_layout_id,
+                                                                                 pos);
+                            if (current_char == ' ' && !have_trailing_whitespace)
+                            {
+                                have_trailing_whitespace = true;
+                                whitespace_rect = char_rect;
+                            }
+                            else if (current_char == ' ' && have_trailing_whitespace)
+                            {
+                                whitespace_rect.x1 += (char_rect.x1 - char_rect.x0);
+                            }
+                        }
+                        ARGB_Color argb = fcolor_resolve(fcolor_id(defcolor_trailing_whitespace));
+                        draw_rectangle(app, whitespace_rect, 1.0f, argb);
                     }
                 }
             }
@@ -1682,6 +1716,7 @@ CUSTOM_COMMAND_SIG(cjh_yank_whole_line)
         set_mark(app);                          \
         motion(app);                            \
         copy(app);                              \
+        cursor_mark_swap(app);                  \
         cjh_enter_normal_mode(app);             \
     }
 
