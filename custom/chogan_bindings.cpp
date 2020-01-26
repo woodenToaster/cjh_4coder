@@ -2944,7 +2944,7 @@ static void cjh_setup_insert_mode_mapping(Mapping *mapping, i64 global_id, i64 f
     Bind(backspace_alpha_numeric_boundary, KeyCode_Backspace, KeyCode_Control);
     Bind(delete_alpha_numeric_boundary, KeyCode_Delete, KeyCode_Control);
     Bind(snipe_backward_whitespace_or_token_boundary, KeyCode_Backspace, KeyCode_Alt);
-    Bind(snipe_forward_whitespace_or_token_boundary, KeyCode_Alt);
+    Bind(snipe_forward_whitespace_or_token_boundary, KeyCode_Delete, KeyCode_Alt);
     Bind(set_mark, KeyCode_Space, KeyCode_Control);
     Bind(replace_in_range, KeyCode_A, KeyCode_Control);
     Bind(copy, KeyCode_C, KeyCode_Control);
