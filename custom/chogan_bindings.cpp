@@ -33,12 +33,12 @@
 // - Change jump list highlight
 
 // TODO(chogan): Bugs
-// - d w occasionally deletes two words
 // - SPC w h/l don't work exactly right
 // - e and b don't work in comments
 // - Visual mode highlights regions in both visible buffers
 // - Indent region in visual line mode
-// - visual line mode d leaves emplty lines
+// - visual line mode d leaves empty lines
+// - Trailing whitespace doesn't work in open scopes
 
 #if !defined(FCODER_CHOGAN_BINDINGS_CPP)
 #define FCODER_CHOGAN_BINDINGS_CPP
@@ -389,13 +389,13 @@ static void cjh_paint_tokens(Application_Links *app, Buffer_ID buffer, Text_Layo
                     }
                 }
             }
-
             if (!token_it_inc_all(&it)){
                 break;
             }
         }
     }
 }
+
 // Multi key command hooks
 
 static void cjh_start_recording_command(Application_Links *app)
@@ -2845,8 +2845,6 @@ static void cjh_setup_normal_mode_mapping(Mapping *mapping, i64 normal_mode_id)
     Bind(cjh_insert_semicolon_at_eol, KeyCode_Semicolon, KeyCode_Control);
 
     // Alt modifier
-    Bind(move_line_up, KeyCode_U, KeyCode_Alt);
-    Bind(move_line_down, KeyCode_D, KeyCode_Alt);
     // M-q fill-paragraph
 }
 
