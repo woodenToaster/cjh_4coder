@@ -39,6 +39,7 @@
 // - Indent region in visual line mode
 // - visual line mode d leaves empty lines
 // - Trailing whitespace doesn't work in open scopes
+// - c e range needs +1
 
 #if !defined(FCODER_CHOGAN_BINDINGS_CPP)
 #define FCODER_CHOGAN_BINDINGS_CPP
@@ -1544,6 +1545,7 @@ static void cjh_setup_c_mapping(Mapping *mapping, i64 c_cmd_map_id)
     Bind(cjh_find_backward_til_c, KeyCode_T, KeyCode_Shift);
     Bind(cjh_move_right_word_c, KeyCode_W);
     Bind(move_right_whitespace_boundary_c, KeyCode_W, KeyCode_Shift);
+    // i a
 }
 
 // D commands
@@ -2166,7 +2168,7 @@ static void cjh_setup_space_mapping(Mapping *mapping, i64 space_cmd_map_id)
     // " i"
     // Bind(); // " jw" 'ace-jump-word-mode)
     // Bind(); // " jc" 'ace-jump-char-mode)
-    // Bind(); // " jl" 'ace-jump-line-mode))
+    // Bind(); // " jl" 'ace-jump-line-mode)
     // " k"
     // " l"
     Bind(cjh_start_multi_key_cmd_macro, KeyCode_M);
