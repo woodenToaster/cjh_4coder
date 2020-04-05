@@ -2848,6 +2848,19 @@ static void cjh_setup_normal_mode_mapping(Mapping *mapping, i64 normal_mode_id)
 
     // Alt modifier
     // M-q fill-paragraph
+
+    Bind(project_fkey_command, KeyCode_F1);
+    Bind(project_fkey_command, KeyCode_F2);
+    Bind(project_fkey_command, KeyCode_F3);
+    Bind(project_fkey_command, KeyCode_F4);
+    Bind(project_fkey_command, KeyCode_F5);
+    Bind(project_fkey_command, KeyCode_F6);
+    Bind(project_fkey_command, KeyCode_F7);
+    Bind(project_fkey_command, KeyCode_F8);
+    Bind(project_fkey_command, KeyCode_F9);
+    Bind(project_fkey_command, KeyCode_F10);
+    Bind(project_fkey_command, KeyCode_F11);
+    Bind(project_fkey_command, KeyCode_F12);
 }
 
 CUSTOM_COMMAND_SIG(cjh_open_curly_braces)
