@@ -199,6 +199,42 @@ mapping_release_map(Mapping *mapping, Command_Map *map){
 
 ////////////////////////////////
 
+function b32
+map_strict_match(Input_Modifier_Set *binding_mod_set, Input_Modifier_Set *event_mod_set, Key_Code skip_self_mod){
+    b32 result = true;
+    i32 binding_mod_count = binding_mod_set->count;
+    Key_Code *binding_mods = binding_mod_set->mods;
+    for (i32 i = 0; i < binding_mod_count; i += 1){
+        if (!has_modifier(event_mod_set, binding_mods[i])){
+            result = false;
+            break;
+        }
+    }
+    i32 mod_count = event_mod_set->count;
+    Key_Code *mods = event_mod_set->mods;
+    for (i32 i = 0; i < mod_count; i += 1){
+        if (mods[i] != skip_self_mod && !has_modifier(binding_mod_set, mods[i])){
+            result = false;
+            break;
+        }
+    }
+    return(result);
+}
+
+function b32
+map_loose_match(Input_Modifier_Set *binding_mod_set, Input_Modifier_Set *event_mod_set){
+    b32 result = true;
+    i32 binding_mod_count = binding_mod_set->count;
+    Key_Code *binding_mods = binding_mod_set->mods;
+    for (i32 i = 0; i < binding_mod_count; i += 1){
+        if (!has_modifier(event_mod_set, binding_mods[i])){
+            result = false;
+            break;
+        }
+    }
+    return(result);
+}
+
 function Command_Binding
 map_get_binding_non_recursive(Command_Map *map, Input_Event *event){
     Command_Binding result = {};
@@ -208,9 +244,11 @@ map_get_binding_non_recursive(Command_Map *map, Input_Event *event){
     }
     else if (map != 0){
         b32 do_table_lookup = false;
-        Input_Modifier_Set *mods = 0;
+        Input_Modifier_Set *mod_set = 0;
         u64 key = 0;
+		Key_Code skip_self_mod = 0;
         
+        // TODO(allen): extract and make sure we only do this once for recursive version.
         switch (event->kind){
             case InputEventKind_TextInsert:
             {
@@ -221,28 +259,29 @@ map_get_binding_non_recursive(Command_Map *map, Input_Event *event){
             {
                 key = mapping__key(InputEventKind_KeyStroke, event->key.code);
                 do_table_lookup = true;
-                mods = &event->key.modifiers;
+                mod_set = &event->key.modifiers;
+				skip_self_mod = event->key.code;
             }break;
             
             case InputEventKind_MouseButton:
             {
                 key = mapping__key(InputEventKind_MouseButton, event->mouse.code);
                 do_table_lookup = true;
-                mods = &event->mouse.modifiers;
+                mod_set = &event->mouse.modifiers;
             }break;
             
             case InputEventKind_MouseWheel:
             {
                 key = mapping__key(InputEventKind_MouseWheel, 0);
                 do_table_lookup = true;
-                mods = &event->mouse_wheel.modifiers;
+                mod_set = &event->mouse_wheel.modifiers;
             }break;
             
             case InputEventKind_MouseMove:
             {
                 key = mapping__key(InputEventKind_MouseMove, 0);
                 do_table_lookup = true;
-                mods = &event->mouse_move.modifiers;
+                mod_set = &event->mouse_move.modifiers;
             }break;
             
             case InputEventKind_Core:
@@ -258,24 +297,27 @@ map_get_binding_non_recursive(Command_Map *map, Input_Event *event){
                 u64 val = 0;
                 table_read(&map->event_code_to_binding_list, lookup, &val);
                 Command_Binding_List *list = (Command_Binding_List*)IntAsPtr(val);
-                if (mods != 0){
+                if (mod_set != 0){
                     for (SNode *node = list->first;
                          node != 0;
                          node = node->next){
                         Command_Modified_Binding *mod_binding = CastFromMember(Command_Modified_Binding, order_node, node);
                         Input_Modifier_Set *binding_mod_set = &mod_binding->mods;
-                        b32 is_a_match = true;
-                        i32 binding_mod_count = binding_mod_set->count;
-                        Key_Code *binding_mods = binding_mod_set->mods;
-                        for (i32 i = 0; i < binding_mod_count; i += 1){
-                            if (!has_modifier(mods, binding_mods[i])){
-                                is_a_match = false;
-                                break;
-                            }
-                        }
-                        if (is_a_match){
+                        if (map_strict_match(binding_mod_set, mod_set, skip_self_mod)){
                             result = mod_binding->binding;
                             break;
+                        }
+                    }
+                    if (result.custom == 0){
+                        for (SNode *node = list->first;
+                             node != 0;
+                             node = node->next){
+                            Command_Modified_Binding *mod_binding = CastFromMember(Command_Modified_Binding, order_node, node);
+                            Input_Modifier_Set *binding_mod_set = &mod_binding->mods;
+                            if (map_loose_match(binding_mod_set, mod_set)){
+                                result = mod_binding->binding;
+                                break;
+                            }
                         }
                     }
                 }

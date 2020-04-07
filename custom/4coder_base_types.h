@@ -135,17 +135,17 @@
 ////////////////////////////////
 
 #if COMPILER_CL
-#if _MSC_VER <= 1800
-# define snprintf _snprintf
-#endif
+# if _MSC_VER <= 1800
+#  define snprintf _snprintf
+# endif
 
-#if (_MSC_VER <= 1500)
-#define JUST_GUESS_INTS
-#endif
+# if (_MSC_VER <= 1500)
+#  define JUST_GUESS_INTS
+# endif
 #endif
 
 // NOTE(yuval): Changed this so that CALL_CONVENTION will be defined for all platforms
-#if ARCH_32BIT
+#if ARCH_32BIT && OS_WINDOWS
 # define CALL_CONVENTION __stdcall
 #else
 # define CALL_CONVENTION
@@ -319,6 +319,11 @@ global_const f32 epsilon_f32 = 5.96046448e-8f;
 
 global_const f32 pi_f32 = 3.14159265359f;
 global_const f32 half_pi_f32 = 1.5707963267f;
+
+global_const f64 max_f64 = 1.79769313486231e+308;
+global_const f64 min_f64 = -max_f64;
+global_const f64 smallest_positive_f64 = 4.94065645841247e-324;
+global_const f64 epsilon_f64 = 1.11022302462515650e-16;
 
 #define clamp_signed_to_i8(x) (i8)(clamp((i64)i8_min, (i64)(x), (i64)i8_max))
 #define clamp_signed_to_i16(x) (i16)(clamp((i64)i16_min, (i64)(x), (i64)i16_max))
@@ -804,19 +809,19 @@ typedef u32 ARGB_Color;
 
 struct i8_Array{
     i8 *vals;
-    i32 coint;
+    i32 count;
 };
 struct i16_Array{
     i16 *vals;
-    i32 coint;
+    i32 count;
 };
 struct i32_Array{
     i32 *vals;
-    i32 coint;
+    i32 count;
 };
 struct i64_Array{
     i64 *vals;
-    i32 coint;
+    i32 count;
 };
 
 struct u8_Array{

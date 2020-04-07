@@ -15,6 +15,7 @@ CUSTOM_ID(attachment, view_highlight_range);
 CUSTOM_ID(attachment, view_highlight_buffer);
 CUSTOM_ID(attachment, view_render_hook);
 CUSTOM_ID(attachment, view_word_complete_menu);
+CUSTOM_ID(attachment, view_lister_loc);
 
 CUSTOM_ID(attachment, buffer_map_id);
 CUSTOM_ID(attachment, buffer_eol_setting);
@@ -117,6 +118,10 @@ global Fade_Range_List buffer_fade_ranges = {};
 global Fade_Range_List view_fade_ranges = {};
 global Arena fade_range_arena = {};
 global Fade_Range *free_fade_ranges = 0;
+
+////////////////////////////////
+
+global Clipboard clipboard0 = {};
 
 // BOTTOM
 
