@@ -4,6 +4,8 @@
 
 // TOP
 
+function void write_text(Application_Links *app, String_Const_u8 insert);
+
 CUSTOM_COMMAND_SIG(clipboard_record_clip)
 CUSTOM_DOC("In response to a new clipboard contents events, saves the new clip onto the clipboard history")
 {

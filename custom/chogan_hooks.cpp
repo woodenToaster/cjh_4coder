@@ -1047,7 +1047,7 @@ BUFFER_EDIT_RANGE_SIG(default_buffer_edit_range){
     b32 do_full_relex = false;
     
     if (async_task_is_running_or_pending(&global_async_system, *lex_task_ptr)){
-        async_task_cancel(&global_async_system, *lex_task_ptr);
+        async_task_cancel(app, &global_async_system, *lex_task_ptr);
         buffer_unmark_as_modified(buffer_id);
         do_full_relex = true;
         *lex_task_ptr = 0;
@@ -1133,7 +1133,7 @@ BUFFER_HOOK_SIG(default_end_buffer){
     Managed_Scope scope = buffer_get_managed_scope(app, buffer_id);
     Async_Task *lex_task_ptr = scope_attachment(app, scope, buffer_lex_task, Async_Task);
     if (lex_task_ptr != 0){
-        async_task_cancel(&global_async_system, *lex_task_ptr);
+        async_task_cancel(app, &global_async_system, *lex_task_ptr);
     }
     buffer_unmark_as_modified(buffer_id);
     code_index_lock();
