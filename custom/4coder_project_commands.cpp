@@ -507,7 +507,8 @@ project_deep_copy__pattern_array(Arena *arena, Project_File_Pattern_Array *src_a
         for (Node_String_Const_u8 *node = src->absolutes.first;
              node != 0;
              node = node->next){
-            string_list_push(arena, &dst->absolutes, node->string);
+            String_Const_u8 string = push_string_copy(arena, node->string);
+            string_list_push(arena, &dst->absolutes, string);
         }
     }
 }
@@ -1260,9 +1261,9 @@ get_project_command_from_user(Application_Links *app, Project *project,
     Project_Command_Lister_Result result = {};
     if (project != 0){
         Scratch_Block scratch(app);
-        Lister *lister = begin_lister(app, scratch);
+        Lister_Block lister(app, scratch);
         lister_set_query(lister, query);
-        lister->handlers = lister_get_default_handlers();
+        lister_set_default_handlers(lister);
         
         Project_Command *proj_cmd = project->command_array.commands;
         i32 count = project->command_array.count;

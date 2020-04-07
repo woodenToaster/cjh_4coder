@@ -5,8 +5,31 @@
 // TOP
 
 #define scope_attachment(app,S,I,T) ((T*)managed_scope_get_attachment((app), (S), (I), sizeof(T)))
-
 #define set_custom_hook(app,ID,F) set_custom_hook((app),(ID),(Void_Func*)(F))
+
+////////////////////////////////
+
+function i32
+get_command_id(Custom_Command_Function *func){
+    i32 result = -1;
+    for (i32 i = 0; i < ArrayCount(fcoder_metacmd_table); i += 1){
+        if (func == fcoder_metacmd_table[i].proc){
+            result = i;
+            break;
+        }
+    }
+    return(result);
+}
+
+function Command_Metadata*
+get_command_metadata(Custom_Command_Function *func){
+    Command_Metadata *result = 0;
+    i32 id = get_command_id(func);
+    if (id >= 0){
+        result = &fcoder_metacmd_table[id];
+    }
+    return(result);
+}
 
 ////////////////////////////////
 
@@ -14,6 +37,10 @@ internal Token_Array
 get_token_array_from_buffer(Application_Links *app, Buffer_ID buffer){
     Token_Array result = {};
     Managed_Scope scope = buffer_get_managed_scope(app, buffer);
+    Async_Task *lex_task_ptr = scope_attachment(app, scope, buffer_lex_task, Async_Task);
+    if (lex_task_ptr != 0){
+        async_task_wait(app, &global_async_system, *lex_task_ptr);
+    }
     Token_Array *ptr = scope_attachment(app, scope, attachment_tokens, Token_Array);
     if (ptr != 0){
         result = *ptr;
@@ -67,16 +94,14 @@ character_predicate_from_function(Character_Predicate_Function *func){
         for (i32 bit_index = 0; bit_index < 8; i += 1, bit_index += 1){
             v[bit_index] = func((u8)i);
         }
-        predicate.b[byte_index] = (
-                                   (v[0] << 0) |
+        predicate.b[byte_index] = ((v[0] << 0) |
                                    (v[1] << 1) |
                                    (v[2] << 2) |
                                    (v[3] << 3) |
                                    (v[4] << 4) |
                                    (v[5] << 5) |
                                    (v[6] << 6) |
-                                   (v[7] << 7)
-                                   );
+                                   (v[7] << 7));
         byte_index += 1;
     }
     return(predicate);
@@ -1200,8 +1225,6 @@ get_indent_info_range(Application_Links *app, Buffer_ID buffer, Range_i64 range,
     Scratch_Block scratch(app);
     String_Const_u8 s = push_buffer_range(app, scratch, buffer, range);
     
-    i32 tab_additional_width = tab_width - 1;
-    
     Indent_Info info = {};
     info.first_char_pos = range.end;
     info.is_blank = true;
@@ -1222,7 +1245,7 @@ get_indent_info_range(Application_Links *app, Buffer_ID buffer, Range_i64 range,
             info.all_space = false;
         }
         if (c == '\t'){
-            info.indent_pos += tab_additional_width;
+            info.indent_pos += tab_width;
         }
     }
     
@@ -1430,29 +1453,21 @@ Query_Bar_Group::~Query_Bar_Group(){
 }
 
 internal b32
-query_user_general(Application_Links *app, Query_Bar *bar, b32 force_number){
-    // NOTE(allen|a3.4.4): It will not cause an *error* if we continue on after failing to.
-    // start a query bar, but it will be unusual behavior from the point of view of the
-    // user, if this command starts intercepting input even though no prompt is shown.
-    // This will only happen if you have a lot of bars open already or if the current view
-    // doesn't support query bars.
+query_user_general(Application_Links *app, Query_Bar *bar, b32 force_number, String_Const_u8 init_string){
     if (start_query_bar(app, bar, 0) == 0){
         return(false);
     }
     
-    b32 success = true;
+    if (init_string.size > 0){
+        String_u8 string = Su8(bar->string.str, bar->string.size, bar->string_capacity);
+        string_append(&string, init_string);
+        bar->string.size = string.string.size;
+    }
     
+    b32 success = true;
     for (;;){
-        // NOTE(allen|a3.4.4): This call will block until the user does one of the input
-        // types specified in the flags.  The first set of flags are inputs you'd like to
-        // intercept that you don't want to abort on.  The second set are inputs that
-        // you'd like to cause the command to abort.  If an event satisfies both flags, it
-        // is treated as an abort.
-        User_Input in = get_next_input(app, EventPropertyGroup_AnyKeyboardEvent,
+        User_Input in = get_next_input(app, EventPropertyGroup_Any,
                                        EventProperty_Escape|EventProperty_MouseButton);
-        
-        // NOTE(allen|a3.4.4): The responsible thing to do on abort is to end the command
-        // without waiting on get_next_input again.
         if (in.abort){
             success = false;
             break;
@@ -1478,9 +1493,6 @@ query_user_general(Application_Links *app, Query_Bar *bar, b32 force_number){
             }
         }
         
-        // NOTE(allen|a3.4.4): All we have to do to update the query bar is edit our
-        // local Query_Bar struct!  This is handy because it means our Query_Bar
-        // is always correct for typical use without extra work updating the bar.
         if (in.event.kind == InputEventKind_KeyStroke &&
             (in.event.key.code == KeyCode_Return || in.event.key.code == KeyCode_Tab)){
             break;
@@ -1492,10 +1504,28 @@ query_user_general(Application_Links *app, Query_Bar *bar, b32 force_number){
         else if (good_insert){
             String_u8 string = Su8(bar->string.str, bar->string.size, bar->string_capacity);
             string_append(&string, insert_string);
-            bar->string = string.string;
+            bar->string.size = string.string.size;
         }
         else{
-            leave_current_input_unhandled(app);
+            // NOTE(allen): is the user trying to execute another command?
+            View_ID view = get_this_ctx_view(app, Access_Always);
+            View_Context ctx = view_current_context(app, view);
+            Mapping *mapping = ctx.mapping;
+            Command_Map *map = mapping_get_map(mapping, ctx.map_id);
+            Command_Binding binding = map_get_binding_recursive(mapping, map, &in.event);
+            if (binding.custom != 0){
+                Command_Metadata *metadata = get_command_metadata(binding.custom);
+                if (metadata != 0){
+                    if (metadata->is_ui){
+                        view_enqueue_command_function(app, view, binding.custom);
+                        break;
+                    }
+                }
+                binding.custom(app);
+            }
+            else{
+                leave_current_input_unhandled(app);
+            }
         }
     }
     
@@ -1504,12 +1534,19 @@ query_user_general(Application_Links *app, Query_Bar *bar, b32 force_number){
 
 internal b32
 query_user_string(Application_Links *app, Query_Bar *bar){
-    return(query_user_general(app, bar, false));
+    return(query_user_general(app, bar, false, string_u8_empty));
 }
 
 internal b32
 query_user_number(Application_Links *app, Query_Bar *bar){
-    return(query_user_general(app, bar, true));
+    return(query_user_general(app, bar, true, string_u8_empty));
+}
+
+internal b32
+query_user_number(Application_Links *app, Query_Bar *bar, i32 x){
+    Scratch_Block scratch(app);
+    String_Const_u8 string = push_u8_stringf(scratch, "%d", x);
+    return(query_user_general(app, bar, true, string));
 }
 
 ////////////////////////////////
@@ -2379,30 +2416,6 @@ guess_line_ending_kind_from_buffer(Application_Links *app, Buffer_ID buffer){
     Scratch_Block scratch(app);
     String_Const_u8 string = push_buffer_range(app, scratch, buffer, Ii64(0, size));
     return(string_guess_line_ending_kind(string));
-}
-
-////////////////////////////////
-
-function i32
-get_command_id(Custom_Command_Function *func){
-    i32 result = -1;
-    for (i32 i = 0; i < ArrayCount(fcoder_metacmd_table); i += 1){
-        if (func == fcoder_metacmd_table[i].proc){
-            result = i;
-            break;
-        }
-    }
-    return(result);
-}
-
-function Command_Metadata*
-get_command_metadata(Custom_Command_Function *func){
-    Command_Metadata *result = 0;
-    i32 id = get_command_id(func);
-    if (id >= 0){
-        result = &fcoder_metacmd_table[id];
-    }
-    return(result);
 }
 
 ////////////////////////////////

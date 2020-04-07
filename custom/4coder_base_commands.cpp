@@ -1,5 +1,5 @@
 /*
-4coder_base_commands.cpp - Base commands such as inserting characters, and 
+4coder_base_commands.cpp - Base commands such as inserting characters, and
 moving the cursor, which work even without the default 4coder framework.
 */
 
@@ -110,17 +110,6 @@ CUSTOM_DOC("Deletes the character to the left of the cursor.")
             }
         }
     }
-}
-
-CUSTOM_COMMAND_SIG(test_double_backspace)
-CUSTOM_DOC("Made for testing purposes (I should have deleted this if you are reading it let me know)")
-{
-    View_ID view = get_active_view(app, Access_ReadWriteVisible);
-    Buffer_ID buffer = view_get_buffer(app, view, Access_ReadWriteVisible);
-    History_Group group = history_group_begin(app, buffer);
-    backspace_char(app);
-    backspace_char(app);
-    history_group_end(group);
 }
 
 CUSTOM_COMMAND_SIG(set_mark)
@@ -584,13 +573,9 @@ CUSTOM_DOC("Converts all ascii text in the range between the cursor and the mark
     view_set_cursor_and_preferred_x(app, view, seek_pos(range.max));
 }
 
-CUSTOM_COMMAND_SIG(clean_all_lines)
-CUSTOM_DOC("Removes trailing whitespace from all lines in the current buffer.")
-{
+function void
+clean_all_lines_buffer(Application_Links *app, Buffer_ID buffer){
     ProfileScope(app, "clean all lines");
-    View_ID view = get_active_view(app, Access_ReadWriteVisible);
-    Buffer_ID buffer = view_get_buffer(app, view, Access_ReadWriteVisible);
-    
     Scratch_Block scratch(app);
     Batch_Edit *batch_first = 0;
     Batch_Edit *batch_last = 0;
@@ -630,13 +615,15 @@ CUSTOM_DOC("Removes trailing whitespace from all lines in the current buffer.")
                     }
                 }
                 
-                i64 start = start_offset + line_start;
-                i64 end   = end_offset   + line_start;
-                
-                Batch_Edit *batch = push_array(scratch, Batch_Edit, 1);
-                sll_queue_push(batch_first, batch_last, batch);
-                batch->edit.text = SCu8();
-                batch->edit.range = Ii64(start, end);
+                if (start_offset > 0){
+                    i64 start = start_offset + line_start;
+                    i64 end   = end_offset   + line_start;
+                    
+                    Batch_Edit *batch = push_array(scratch, Batch_Edit, 1);
+                    sll_queue_push(batch_first, batch_last, batch);
+                    batch->edit.text = SCu8();
+                    batch->edit.range = Ii64(start, end);
+                }
             }
         }
     }
@@ -644,6 +631,15 @@ CUSTOM_DOC("Removes trailing whitespace from all lines in the current buffer.")
     if (batch_first != 0){
         buffer_batch_edit(app, buffer, batch_first);
     }
+}
+
+CUSTOM_COMMAND_SIG(clean_all_lines)
+CUSTOM_DOC("Removes trailing whitespace from all lines in the current buffer.")
+{
+    ProfileScope(app, "clean all lines");
+    View_ID view = get_active_view(app, Access_ReadWriteVisible);
+    Buffer_ID buffer = view_get_buffer(app, view, Access_ReadWriteVisible);
+    clean_all_lines_buffer(app, buffer);
 }
 
 ////////////////////////////////
@@ -708,6 +704,26 @@ CUSTOM_DOC("Toggles the visibility of the FPS performance meter")
     show_fps_hud = !show_fps_hud;
 }
 
+CUSTOM_COMMAND_SIG(set_face_size)
+CUSTOM_DOC("Set face size of the face used by the current buffer.")
+{
+    View_ID view = get_active_view(app, Access_Always);
+    Buffer_ID buffer = view_get_buffer(app, view, Access_Always);
+    Face_ID face_id = get_face_id(app, buffer);
+    Face_Description description = get_face_description(app, face_id);
+    
+    Query_Bar_Group group(app);
+    u8 string_space[256];
+    Query_Bar bar = {};
+    bar.prompt = string_u8_litexpr("Face Size: ");
+    bar.string = SCu8(string_space, (u64)0);
+    bar.string_capacity = sizeof(string_space);
+    if (query_user_number(app, &bar, description.parameters.pt_size)){
+        description.parameters.pt_size = (u32)string_to_integer(bar.string, 10);
+        try_modify_face(app, face_id, &description);
+    }
+}
+
 CUSTOM_COMMAND_SIG(increase_face_size)
 CUSTOM_DOC("Increase the size of the face used by the current buffer.")
 {
@@ -728,6 +744,37 @@ CUSTOM_DOC("Decrease the size of the face used by the current buffer.")
     Face_Description description = get_face_description(app, face_id);
     --description.parameters.pt_size;
     try_modify_face(app, face_id, &description);
+}
+
+CUSTOM_COMMAND_SIG(set_face_size_this_buffer)
+CUSTOM_DOC("Set face size of the face used by the current buffer; if any other buffers are using the same face a new face is created so that only this buffer is effected")
+{
+    View_ID view = get_active_view(app, Access_Always);
+    Buffer_ID buffer = view_get_buffer(app, view, Access_Always);
+    Face_ID face_id = get_face_id(app, buffer);
+    
+    b32 is_shared = false;
+    for (Buffer_ID buf_it = get_buffer_next(app, 0, Access_Always);
+         buf_it != 0;
+         buf_it = get_buffer_next(app, buf_it, Access_Always)){
+        if (buf_it == buffer){
+            continue;
+        }
+        Face_ID buf_it_face_id = get_face_id(app, buf_it);
+        if (buf_it_face_id == face_id){
+            is_shared = true;
+        }
+    }
+    
+    if (is_shared){
+        Face_Description description = get_face_description(app, face_id);
+        face_id = try_create_new_face(app, &description);
+        if (face_id != 0){
+            buffer_set_face(app, buffer, face_id);
+        }
+    }
+    
+    set_face_size(app);
 }
 
 CUSTOM_COMMAND_SIG(mouse_wheel_change_face_size)
@@ -851,8 +898,7 @@ isearch(Application_Links *app, Scan_Direction start_scan, i64 first_pos,
         }
         isearch__update_highlight(app, view, Ii64_size(pos, match_size));
         
-        in = get_next_input(app, EventPropertyGroup_AnyKeyboardEvent,
-                            EventProperty_Escape|EventProperty_ViewActivation);
+        in = get_next_input(app, EventPropertyGroup_Any, EventProperty_Escape);
         if (in.abort){
             break;
         }
@@ -895,9 +941,6 @@ isearch(Application_Links *app, Scan_Direction start_scan, i64 first_pos,
             }
         }
         
-        // TODO(allen): how to detect if the input corresponds to
-        // a search or rsearch command, a scroll wheel command?
-        
         b32 do_scan_action = false;
         b32 do_scroll_wheel = false;
         Scan_Direction change_scan = scan;
@@ -907,17 +950,41 @@ isearch(Application_Links *app, Scan_Direction start_scan, i64 first_pos,
                 change_scan = Scan_Forward;
                 do_scan_action = true;
             }
-            if (match_key_code(&in, KeyCode_PageUp) ||
-                match_key_code(&in, KeyCode_Up)){
+            else if (match_key_code(&in, KeyCode_PageUp) ||
+                     match_key_code(&in, KeyCode_Up)){
                 change_scan = Scan_Backward;
                 do_scan_action = true;
             }
-            
-#if 0
-            if (in.command == mouse_wheel_scroll){
-                do_scroll_wheel = true;
+            else{
+                // NOTE(allen): is the user trying to execute another command?
+                View_Context ctx = view_current_context(app, view);
+                Mapping *mapping = ctx.mapping;
+                Command_Map *map = mapping_get_map(mapping, ctx.map_id);
+                Command_Binding binding = map_get_binding_recursive(mapping, map, &in.event);
+                if (binding.custom != 0){
+                    if (binding.custom == search){
+                        change_scan = Scan_Forward;
+                        do_scan_action = true;
+                    }
+                    else if (binding.custom == reverse_search){
+                        change_scan = Scan_Backward;
+                        do_scan_action = true;
+                    }
+                    else{
+                        Command_Metadata *metadata = get_command_metadata(binding.custom);
+                        if (metadata != 0){
+                            if (metadata->is_ui){
+                                view_enqueue_command_function(app, view, binding.custom);
+                                break;
+                            }
+                        }
+                        binding.custom(app);
+                    }
+                }
+                else{
+                    leave_current_input_unhandled(app);
+                }
             }
-#endif
         }
         
         if (string_change){
@@ -969,9 +1036,6 @@ isearch(Application_Links *app, Scan_Direction start_scan, i64 first_pos,
         }
         else if (do_scroll_wheel){
             mouse_wheel_scroll(app);
-        }
-        else{
-            leave_current_input_unhandled(app);
         }
     }
     
