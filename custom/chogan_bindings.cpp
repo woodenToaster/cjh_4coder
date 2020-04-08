@@ -9,6 +9,14 @@
 // - surround with ("[{' (enclose_pos)
 // - fill_paragraph
 // - C-v mode
+// - Save previous buffer on `gd` so `SPC TAB` works
+// - `r <x>` should be repeatable with `.`
+// - `V {`
+// - `x p` should swap letters
+// - treat '->' as a word
+// - enable line wrap in compilation buffer
+// - Keep ring buffer of all views to enable `SPC b n` and `SPC b p`.
+// - Delete trailing whitespace on empty lines.
 
 // TODO(chogan): Enhancements
 // - Alt-p to populate search bar with search history
@@ -22,6 +30,11 @@
 // - / in visual line mode makes fugly comments
 // - don't insert whitespace on blank lines
 // - d s/S to delete whitespace forward/backward
+// - Create binding for `0 D`
+// - `Y` should be `y $`
+// - `.` should repeat gc
+// - query replace: Put text of interest in center of screen.
+// - Auto shader string formatting.
 
 // TODO(chogan): Theme
 // - Syntax highlighting for variable defs, enums, args
@@ -33,6 +46,8 @@
 // - Change jump list highlight
 
 // TODO(chogan): Bugs
+// - goto next error doesn't understand relative paths
+// - Indentation is messed up on multi line function calls
 // - SPC w h/l don't work exactly right
 // - e and b don't work in comments
 // - Visual mode highlights regions in both visible buffers
@@ -40,6 +55,14 @@
 // - visual line mode d leaves empty lines
 // - Trailing whitespace doesn't work in open scopes
 // - c e range needs +1
+// - `V d` leaves a bunch of empty spaces
+// - enter normal mode after goto next error
+// - \n should be platform specific
+// - string argument passed to ag (SPS /) needs work
+// - Need to ESC after gaining focus with mouse
+// - Switch to normal mode after `V /`
+// - `d w` deletes whitespace and next word.
+// - `, h` should save previous buffer so `SPC TAB` works
 
 #if !defined(FCODER_CHOGAN_BINDINGS_CPP)
 #define FCODER_CHOGAN_BINDINGS_CPP
