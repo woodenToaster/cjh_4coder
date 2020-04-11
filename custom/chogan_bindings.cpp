@@ -5,7 +5,7 @@
 // TODO(chogan): Missing functionality
 // - Layouts/workspaces
 // - [[ or gp (use code index)
-// - (ydc) i w(["'a
+// - inner `<y|d|c> i <w|(|[|"|'|a>`
 // - surround with ("[{' (enclose_pos)
 // - fill_paragraph
 // - C-v mode
@@ -46,7 +46,6 @@
 // - Change jump list highlight
 
 // TODO(chogan): Bugs
-// - goto next error doesn't understand relative paths
 // - Indentation is messed up on multi line function calls
 // - SPC w h/l don't work exactly right
 // - e and b don't work in comments
@@ -56,7 +55,6 @@
 // - Trailing whitespace doesn't work in open scopes
 // - c e range needs +1
 // - `V d` leaves a bunch of empty spaces
-// - enter normal mode after goto next error
 // - \n should be platform specific
 // - string argument passed to ag (SPS /) needs work
 // - Need to ESC after gaining focus with mouse
@@ -2779,7 +2777,7 @@ static void cjh_setup_normal_mode_mapping(Mapping *mapping, i64 normal_mode_id)
     Bind(move_up, KeyCode_K);
     Bind(move_right, KeyCode_L);
     Bind(cjh_put_mark_to_register, KeyCode_M);
-    Bind(goto_next_jump, KeyCode_N);
+    Bind(cjh_goto_next_jump, KeyCode_N);
     Bind(cjh_open_newline_below, KeyCode_O);
     Bind(cjh_paste_and_indent, KeyCode_P);
     Bind(cjh_query_replace, KeyCode_Q);
