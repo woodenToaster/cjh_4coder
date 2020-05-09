@@ -184,7 +184,7 @@ get_indentation_array(Application_Links *app, Arena *arena, Buffer_ID buffer, Ra
         
         Token_Iterator_Array token_it = token_iterator(0, tokens, anchor_token);
         
-        Scratch_Block scratch(app);
+        Scratch_Block scratch(app, arena);
         Nest *nest = 0;
         Nest_Alloc nest_alloc = {};
         
@@ -273,6 +273,11 @@ get_indentation_array(Application_Links *app, Arena *arena, Buffer_ID buffer, Ra
                         }
                         //ignore_unfinished_statement = true;
                     }break;
+                }
+                
+                if (token->sub_kind == TokenCppKind_BlockComment ||
+                    token->sub_kind == TokenCppKind_LiteralStringRaw){
+                    ignore_unfinished_statement = true;
                 }
                 
                 if (in_unfinished_statement && !ignore_unfinished_statement){
@@ -382,16 +387,15 @@ auto_indent_buffer(Application_Links *app, Buffer_ID buffer, Range_i64 pos, Inde
     return(result);
 }
 
-global_const i32 auto_indent_tab_width = 4;
-
 function void
 auto_indent_buffer(Application_Links *app, Buffer_ID buffer, Range_i64 pos, Indent_Flag flags){
     i32 indent_width = global_config.indent_width;
+    i32 tab_width = global_config.default_tab_width;
     AddFlag(flags, Indent_FullTokens);
     if (global_config.indent_with_tabs){
         AddFlag(flags, Indent_UseTab);
     }
-    auto_indent_buffer(app, buffer, pos, flags, indent_width, auto_indent_tab_width);
+    auto_indent_buffer(app, buffer, pos, flags, indent_width, tab_width);
 }
 
 function void
@@ -454,10 +458,21 @@ CUSTOM_DOC("Inserts text and auto-indents the line on which the cursor sits if a
         if (do_auto_indent){
             View_ID view = get_active_view(app, Access_ReadWriteVisible);
             Buffer_ID buffer = view_get_buffer(app, view, Access_ReadWriteVisible);
+            
             Range_i64 pos = {};
-            pos.min = view_get_cursor_pos(app, view);
+            if (view_has_highlighted_range(app, view)){
+                pos = get_view_range(app, view);
+            }
+            else{
+                pos.min = pos.max = view_get_cursor_pos(app, view);
+            }
+            
             write_text_input(app);
-            pos.max= view_get_cursor_pos(app, view);
+            
+            i64 end_pos = view_get_cursor_pos(app, view);
+            pos.min = Min(pos.min, end_pos);
+            pos.max = Max(pos.max, end_pos);
+            
             auto_indent_buffer(app, buffer, pos, 0);
             move_past_lead_whitespace(app, view, buffer);
         }

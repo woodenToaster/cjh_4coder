@@ -132,7 +132,9 @@ static bool cjh_in_visual_mode();
 
 // NOTE(allen): Users can declare their own managed IDs here.
 
+#if !defined(META_PASS)
 #include "generated/managed_id_metadata.cpp"
+#endif
 
 struct MarkNode
 {
@@ -2323,7 +2325,7 @@ CUSTOM_COMMAND_SIG(cjh_toggle_upper_lower)
 CUSTOM_COMMAND_SIG(cjh_repeat_last_command)
 {
     Buffer_ID buffer = get_keyboard_log_buffer(app);
-    Scratch_Block scratch(app, Scratch_Share);
+    Scratch_Block scratch(app);
     String_Const_u8 macro = push_buffer_range(app, scratch, buffer, cjh_last_command_range);
     keyboard_macro_play(app, macro);
     cjh_enter_normal_mode(app);

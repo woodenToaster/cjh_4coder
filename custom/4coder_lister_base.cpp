@@ -219,14 +219,30 @@ lister_render(Application_Links *app, Frame_Info frame_info, View_ID view){
     }
     
     {
+        Vec2_f32 p = V2f32(text_field_rect.x0 + 3.f, text_field_rect.y0);
         Fancy_Line text_field = {};
         push_fancy_string(scratch, &text_field, fcolor_id(defcolor_pop1),
                           lister->query.string);
         push_fancy_stringf(scratch, &text_field, " ");
+        p = draw_fancy_line(app, face_id, fcolor_zero(), &text_field, p);
+        
+        // TODO(allen): This is a bit of a hack. Maybe an upgrade to fancy to focus
+        // more on being good at this and less on overriding everything 10 ways to sunday
+        // would be good.
+        block_zero_struct(&text_field);
         push_fancy_string(scratch, &text_field, fcolor_id(defcolor_text_default),
                           lister->text_field.string);
-        draw_fancy_line(app, face_id, fcolor_zero(), &text_field,
-                        V2f32(text_field_rect.x0 + 3.f, text_field_rect.y0));
+        f32 width = get_fancy_line_width(app, face_id, &text_field);
+        f32 cap_width = text_field_rect.x1 - p.x - 6.f;
+        if (cap_width < width){
+            Rect_f32 prect = draw_set_clip(app, Rf32(p.x, text_field_rect.y0, p.x + cap_width, text_field_rect.y1));
+            p.x += cap_width - width;
+            draw_fancy_line(app, face_id, fcolor_zero(), &text_field, p);
+            draw_set_clip(app, prect);
+        }
+        else{
+            draw_fancy_line(app, face_id, fcolor_zero(), &text_field, p);
+        }
     }
     
     
@@ -304,8 +320,9 @@ lister_render(Application_Links *app, Frame_Info frame_info, View_ID view){
             highlight = UIHighlight_Hover;
         }
         
-        draw_rectangle_fcolor(app, item_rect, 6.f, get_item_margin_color(highlight));
-        draw_rectangle_fcolor(app, item_inner, 6.f, get_item_margin_color(highlight, 1));
+        f32 roundness = block_height*global_config.lister_roundness;
+        draw_rectangle_fcolor(app, item_rect, roundness, get_item_margin_color(highlight));
+        draw_rectangle_fcolor(app, item_inner, roundness, get_item_margin_color(highlight, 1));
         
         Fancy_Line line = {};
         push_fancy_string(scratch, &line, fcolor_id(defcolor_text_default), node->string);
@@ -399,7 +416,8 @@ lister_update_selection_values(Lister *lister){
 
 function void
 lister_update_filtered_list(Application_Links *app, Lister *lister){
-    Scratch_Block scratch(app, Scratch_Share);
+    Arena *arena = lister->arena;
+    Scratch_Block scratch(app, arena);
     
     Lister_Filtered filtered = lister_get_filtered(scratch, lister);
     
@@ -409,7 +427,6 @@ lister_update_filtered_list(Application_Links *app, Lister *lister){
         filtered.substring_matches,
     };
     
-    Arena *arena = lister->arena;
     end_temp(lister->filter_restore_point);
     
     i32 total_count = 0;

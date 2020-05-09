@@ -198,7 +198,7 @@ default_tick(Application_Links *app, Frame_Info frame_info){
     
     buffer_modified_set_clear();
     
-    if (tick_all_fade_ranges(frame_info.animation_dt)){
+    if (tick_all_fade_ranges(app, frame_info.animation_dt)){
         animate_in_n_milliseconds(app, 0);
     }
 }
@@ -376,8 +376,8 @@ chogan_render_buffer(Application_Links *app, View_ID view_id, Face_ID face_id,
 
     // NOTE(allen): Cursor shape
     Face_Metrics metrics = get_face_metrics(app, face_id);
-    f32 cursor_roundness = 1.0f;
-    f32 mark_thickness = 2.f;
+    f32 cursor_roundness = metrics.normal_advance*global_config.cursor_roundness;
+    f32 mark_thickness = (f32)global_config.mark_thickness;
     
     // NOTE(allen): Cursor
     if (view_id != cjh_status_footer_panel_view_id)
@@ -387,7 +387,7 @@ chogan_render_buffer(Application_Links *app, View_ID view_id, Face_ID face_id,
     }
     
     // NOTE(allen): Fade ranges
-    paint_fade_ranges(app, text_layout_id, buffer, view_id);
+    paint_fade_ranges(app, text_layout_id, buffer);
     
     // NOTE(allen): put the actual text on the actual screen
     draw_text_layout_default(app, text_layout_id);
@@ -921,8 +921,8 @@ BUFFER_HOOK_SIG(default_begin_buffer){
     }
     
     String_Const_u8 buffer_name = push_buffer_base_name(app, scratch, buffer_id);
-    if (string_match(buffer_name, string_u8_litexpr("*compilation*"))){
-        wrap_lines = false;
+    if (buffer_name.size > 0 && buffer_name.str[0] == '*' && buffer_name.str[buffer_name.size - 1] == '*'){
+        wrap_lines = global_config.enable_output_wrapping;
     }
     
     if (use_lexer){
@@ -979,8 +979,15 @@ BUFFER_HOOK_SIG(default_new_file){
         string_list_push(scratch, &guard_list, part);
     }
     String_Const_u8 guard = string_list_flatten(scratch, guard_list);
+    Date_Time date_time = system_now_date_time_universal();
+    date_time = system_local_date_time_from_universal(&date_time);
+    String_Const_u8 date_string = date_time_format(scratch, "month day yyyy h:mimi ampm", &date_time);
     
     Buffer_Insertion insert = begin_buffer_insertion_at_buffered(app, buffer_id, 0, scratch, KB(16));
+    insertf(&insert,
+            "/* date = %.*s */\n"
+            "\n",
+            string_expand(date_string));
     insertf(&insert,
             "#ifndef %.*s\n"
             "#define %.*s\n"
@@ -998,7 +1005,7 @@ BUFFER_HOOK_SIG(default_file_save){
     // buffer_id
     ProfileScope(app, "default file save");
     b32 is_virtual = global_config.enable_virtual_whitespace;
-    if (global_config.automatically_indent_text_on_save && is_virtual){ 
+    if (global_config.automatically_indent_text_on_save && is_virtual){
         auto_indent_buffer(app, buffer_id, buffer_range(app, buffer_id));
     }
     
@@ -1024,8 +1031,9 @@ BUFFER_EDIT_RANGE_SIG(default_buffer_edit_range){
     // buffer_id, new_range, original_size
     ProfileScope(app, "default edit range");
     
-    Range_i64 old_range = Ii64(new_range.first, new_range.first + original_size);
+    Range_i64 old_range = Ii64(old_cursor_range.min.pos, old_cursor_range.max.pos);
     
+    buffer_shift_fade_ranges(buffer_id, old_range.max, (new_range.max - old_range.max));
     {
         code_index_lock();
         Code_Index_File *file = code_index_get_file(buffer_id);
@@ -1143,6 +1151,16 @@ BUFFER_HOOK_SIG(default_end_buffer){
     return(0);
 }
 
+function void
+default_view_change_buffer(Application_Links *app, View_ID view_id,
+                           Buffer_ID old_buffer_id, Buffer_ID new_buffer_id){
+    Managed_Scope scope = view_get_managed_scope(app, view_id);
+    Buffer_ID *prev_buffer_id = scope_attachment(app, scope, view_previous_buffer, Buffer_ID);
+    if (prev_buffer_id != 0){
+        *prev_buffer_id = old_buffer_id;
+    }
+}
+
 internal void
 cjh_set_hooks(Application_Links *app){
     set_custom_hook(app, HookID_BufferViewerUpdate, default_view_adjust);
@@ -1150,15 +1168,9 @@ cjh_set_hooks(Application_Links *app){
     set_custom_hook(app, HookID_ViewEventHandler, chogan_view_input_handler);
     set_custom_hook(app, HookID_Tick, default_tick);
     set_custom_hook(app, HookID_RenderCaller, cjh_render_caller);
-#if 0
-    set_custom_hook(app, HookID_DeltaRule, original_delta);
-    set_custom_hook_memory_size(app, HookID_DeltaRule,
-                                delta_ctx_size(original_delta_memory_size));
-#else
     set_custom_hook(app, HookID_DeltaRule, fixed_time_cubic_delta);
     set_custom_hook_memory_size(app, HookID_DeltaRule,
                                 delta_ctx_size(fixed_time_cubic_delta_memory_size));
-#endif
     set_custom_hook(app, HookID_BufferNameResolver, default_buffer_name_resolution);
     
     set_custom_hook(app, HookID_BeginBuffer, default_begin_buffer);
@@ -1167,6 +1179,7 @@ cjh_set_hooks(Application_Links *app){
     set_custom_hook(app, HookID_SaveFile, default_file_save);
     set_custom_hook(app, HookID_BufferEditRange, default_buffer_edit_range);
     set_custom_hook(app, HookID_BufferRegion, default_buffer_region);
+    set_custom_hook(app, HookID_ViewChangeBuffer, default_view_change_buffer);
     
     set_custom_hook(app, HookID_Layout, layout_unwrapped);
     //set_custom_hook(app, HookID_Layout, layout_wrap_anywhere);

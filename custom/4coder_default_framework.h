@@ -98,14 +98,15 @@ struct Buffer_Modified_Set{
 
 struct Fade_Range{
     Fade_Range *next;
-    union{
-        Buffer_ID buffer_id;
-        View_ID view_id;
-    };
+    Buffer_ID buffer_id;
     f32 t;
     f32 full_t;
-    Range_i64 range;
     ARGB_Color color;
+    b32 negate_fade_direction;
+    Range_i64 range;
+    
+    void (*finish_call)(Application_Links *app, struct Fade_Range *range);
+    void *opaque[4];
 };
 
 struct Fade_Range_List{
