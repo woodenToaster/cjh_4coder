@@ -16,6 +16,7 @@ CUSTOM_ID(attachment, view_highlight_buffer);
 CUSTOM_ID(attachment, view_render_hook);
 CUSTOM_ID(attachment, view_word_complete_menu);
 CUSTOM_ID(attachment, view_lister_loc);
+CUSTOM_ID(attachment, view_previous_buffer);
 
 CUSTOM_ID(attachment, buffer_map_id);
 CUSTOM_ID(attachment, buffer_eol_setting);
@@ -78,7 +79,7 @@ global i32 fcoder_mode = FCoderMode_Original;
 global ID_Pos_Jump_Location prev_location = {};
 
 
-global Arena *global_config_arena = {};
+global Arena global_config_arena = {};
 global Config_Data global_config = {};
 
 global char previous_isearch_query[256] = {};
@@ -95,7 +96,6 @@ global Range_i64 global_keyboard_macro_range = {};
 ////////////////////////////////
 
 global Fade_Range_List buffer_fade_ranges = {};
-global Fade_Range_List view_fade_ranges = {};
 global Arena fade_range_arena = {};
 global Fade_Range *free_fade_ranges = 0;
 

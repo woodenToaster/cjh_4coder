@@ -5,7 +5,7 @@
 // TOP
 
 global Project current_project = {};
-global Arena *current_project_arena = {};
+global Arena current_project_arena = {};
 
 ///////////////////////////////
 
@@ -332,9 +332,8 @@ parse_project__config_data__version_1(Application_Links *app, Arena *arena, Stri
                     goto finish_command;
                 }
                 
-                cmd_result = config_compound_member(parsed, src,
-                                                    string_u8_litexpr("cmd"), 1);
-                if (cmd_result.success){
+                cmd_result = config_compound_member(parsed, src, string_u8_litexpr("cmd"), 1);
+                if (cmd_result.success && cmd_result.type == ConfigRValueType_Compound){
                     cmd_set = cmd_result.compound;
                     cmd_pos = cmd_result.pos;
                 }
@@ -631,13 +630,13 @@ set_current_project(Application_Links *app, Project *project, Config *parsed){
     Scratch_Block scratch(app);
     
     if (parsed != 0 && project != 0){
-        if (current_project_arena == 0){
-            current_project_arena = reserve_arena(app);
+        if (current_project_arena.base_allocator == 0){
+            current_project_arena = make_arena_system();
         }
         
         // Copy project to current_project
-        linalloc_clear(current_project_arena);
-        Project new_project = project_deep_copy(current_project_arena, project);
+        linalloc_clear(&current_project_arena);
+        Project new_project = project_deep_copy(&current_project_arena, project);
         if (new_project.loaded){
             current_project = new_project;
             
@@ -691,18 +690,21 @@ set_current_project(Application_Links *app, Project *project, Config *parsed){
     if (print_feedback){
         Temp_Memory temp = begin_temp(scratch);
         
-        // Top
-        print_message(app, string_u8_litexpr("Loaded project file:\n"));
-        
         // Errors
         String_Const_u8 error_text = config_stringize_errors(app, scratch, parsed);
-        print_message(app, error_text);
+        if (error_text.size > 0){
+            print_message(app, string_u8_litexpr("Project errors:\n"));
+            print_message(app, error_text);
+            print_message(app, string_u8_litexpr("\n"));
+        }
         
         // Values
         if (project == 0){
             print_message(app, string_u8_litexpr("Could not instantiate project\n"));
         }
         else{
+            print_message(app, string_u8_litexpr("New project contents:\n"));
+            
             Temp_Memory temp2 = begin_temp(scratch);
             List_String_Const_u8 list = {};
             
@@ -728,15 +730,14 @@ set_current_project(Application_Links *app, Project *project, Config *parsed){
 function void
 set_current_project_from_data(Application_Links *app, String_Const_u8 file_name,
                               Data data, String_Const_u8 file_dir){
-    Scratch_Block scratch(app, Scratch_Share);
-    Project_Parse_Result project_parse = parse_project__data(app, scratch, file_name,
-                                                             data, file_dir);
+    Scratch_Block scratch(app);
+    Project_Parse_Result project_parse = parse_project__data(app, scratch, file_name, data, file_dir);
     set_current_project(app, project_parse.project, project_parse.parsed);
 }
 
 function void
 set_current_project_from_nearest_project_file(Application_Links *app){
-    Scratch_Block scratch(app, Scratch_Share);
+    Scratch_Block scratch(app);
     Project_Parse_Result project_parse = parse_project__nearest_file(app, scratch);
     set_current_project(app, project_parse.project, project_parse.parsed);
 }
@@ -1256,8 +1257,7 @@ CUSTOM_DOC("Queries the user for several configuration options and initializes a
 ///////////////////////////////
 
 function Project_Command_Lister_Result
-get_project_command_from_user(Application_Links *app, Project *project,
-                              String_Const_u8 query){
+get_project_command_from_user(Application_Links *app, Project *project, String_Const_u8 query){
     Project_Command_Lister_Result result = {};
     if (project != 0){
         Scratch_Block scratch(app);

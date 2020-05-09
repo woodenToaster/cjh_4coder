@@ -155,16 +155,14 @@ CUSTOM_COMMAND_SIG(backspace_alpha_numeric_boundary)
 CUSTOM_DOC("Delete characters between the cursor position and the first alphanumeric boundary to the left.")
 {
     Scratch_Block scratch(app);
-    current_view_boundary_delete(app, Scan_Backward,
-                                 push_boundary_list(scratch, boundary_alpha_numeric));
+    current_view_boundary_delete(app, Scan_Backward, push_boundary_list(scratch, boundary_alpha_numeric));
 }
 
 CUSTOM_COMMAND_SIG(delete_alpha_numeric_boundary)
 CUSTOM_DOC("Delete characters between the cursor position and the first alphanumeric boundary to the right.")
 {
     Scratch_Block scratch(app);
-    current_view_boundary_delete(app, Scan_Forward,
-                                 push_boundary_list(scratch, boundary_alpha_numeric));
+    current_view_boundary_delete(app, Scan_Forward, push_boundary_list(scratch, boundary_alpha_numeric));
 }
 
 function void
@@ -206,6 +204,7 @@ CUSTOM_DOC("Centers the view vertically on the line on which the cursor sits.")
     scroll.target.line_number = cursor.line;
     scroll.target.pixel_shift.y = -view_height*0.5f;
     view_set_buffer_scroll(app, view, scroll, SetBufferScroll_SnapCursorIntoView);
+    no_mark_snap_to_cursor(app, view);
 }
 
 CUSTOM_COMMAND_SIG(left_adjust_view)
@@ -218,6 +217,7 @@ CUSTOM_DOC("Sets the left size of the view near the x position of the cursor.")
     Buffer_Scroll scroll = view_get_buffer_scroll(app, view);
     scroll.target.pixel_shift.x = clamp_bot(0.f, p.x - 30.f);
     view_set_buffer_scroll(app, view, scroll, SetBufferScroll_SnapCursorIntoView);
+    no_mark_snap_to_cursor(app, view);
 }
 
 CUSTOM_COMMAND_SIG(click_set_cursor_and_mark)
@@ -272,6 +272,7 @@ CUSTOM_DOC("Reads the scroll wheel value from the mouse state and scrolls accord
         scroll.target = view_move_buffer_point(app, view, scroll.target, V2f32(0.f, (f32)mouse.wheel));
         view_set_buffer_scroll(app, view, scroll, SetBufferScroll_SnapCursorIntoView);
     }
+    no_mark_snap_to_cursor(app, view);
 }
 
 ////////////////////////////////
@@ -573,8 +574,14 @@ CUSTOM_DOC("Converts all ascii text in the range between the cursor and the mark
     view_set_cursor_and_preferred_x(app, view, seek_pos(range.max));
 }
 
+typedef i32 Clean_All_Lines_Mode;
+enum{
+    CleanAllLinesMode_RemoveBlankLines,
+    CleanAllLinesMode_LeaveBlankLines,
+};
+
 function void
-clean_all_lines_buffer(Application_Links *app, Buffer_ID buffer){
+clean_all_lines_buffer(Application_Links *app, Buffer_ID buffer, Clean_All_Lines_Mode mode){
     ProfileScope(app, "clean all lines");
     Scratch_Block scratch(app);
     Batch_Edit *batch_first = 0;
@@ -615,7 +622,7 @@ clean_all_lines_buffer(Application_Links *app, Buffer_ID buffer){
                     }
                 }
                 
-                if (start_offset > 0){
+                if (mode == CleanAllLinesMode_RemoveBlankLines || start_offset > 0){
                     i64 start = start_offset + line_start;
                     i64 end   = end_offset   + line_start;
                     
@@ -634,12 +641,21 @@ clean_all_lines_buffer(Application_Links *app, Buffer_ID buffer){
 }
 
 CUSTOM_COMMAND_SIG(clean_all_lines)
+CUSTOM_DOC("Removes trailing whitespace from all lines and removes all blank lines in the current buffer.")
+{
+    ProfileScope(app, "clean all lines");
+    View_ID view = get_active_view(app, Access_ReadWriteVisible);
+    Buffer_ID buffer = view_get_buffer(app, view, Access_ReadWriteVisible);
+    clean_all_lines_buffer(app, buffer, CleanAllLinesMode_RemoveBlankLines);
+}
+
+CUSTOM_COMMAND_SIG(clean_trailing_whitespace)
 CUSTOM_DOC("Removes trailing whitespace from all lines in the current buffer.")
 {
     ProfileScope(app, "clean all lines");
     View_ID view = get_active_view(app, Access_ReadWriteVisible);
     Buffer_ID buffer = view_get_buffer(app, view, Access_ReadWriteVisible);
-    clean_all_lines_buffer(app, buffer);
+    clean_all_lines_buffer(app, buffer, CleanAllLinesMode_LeaveBlankLines);
 }
 
 ////////////////////////////////
@@ -1636,6 +1652,24 @@ CUSTOM_DOC("Swaps the active panel with it's sibling.")
     }
 }
 
+CUSTOM_COMMAND_SIG(quick_swap_buffer)
+CUSTOM_DOC("Change to the most recently used buffer in this view - or to the top of the buffer stack if the most recent doesn't exist anymore")
+{
+    View_ID view = get_active_view(app, Access_Visible);
+    Managed_Scope scope = view_get_managed_scope(app, view);
+    Buffer_ID *prev_buffer = scope_attachment(app, scope, view_previous_buffer, Buffer_ID);
+    b32 fallback = true;
+    if (prev_buffer != 0 && *prev_buffer != 0){
+        if (view_set_buffer(app, view, *prev_buffer, 0)){
+            fallback = false;
+        }
+    }
+    if (fallback){
+        Buffer_ID top_buffer = get_buffer_next(app, 0, Access_Always);
+        view_set_buffer(app, view, top_buffer, 0);
+    }
+}
+
 ////////////////////////////////
 
 CUSTOM_COMMAND_SIG(kill_buffer)
@@ -1666,9 +1700,10 @@ CUSTOM_DOC("Reopen the current buffer from the hard drive.")
 
 ////////////////////////////////
 
-internal i32
+internal i64
 record_get_new_cursor_position_undo(Application_Links *app, Buffer_ID buffer_id, History_Record_Index index, Record_Info record){
-    i32 new_edit_position = 0;
+    i64 new_edit_position = record.pos_before_edit;
+#if 0
     switch (record.kind){
         default:
         case RecordKind_Single:
@@ -1681,16 +1716,17 @@ record_get_new_cursor_position_undo(Application_Links *app, Buffer_ID buffer_id,
             new_edit_position = (i32)(sub_record.single_first + sub_record.single_string_backward.size);
         }break;
     }
+#endif
     return(new_edit_position);
 }
 
-internal i32
+internal i64
 record_get_new_cursor_position_undo(Application_Links *app, Buffer_ID buffer_id, History_Record_Index index){
     Record_Info record = buffer_history_get_record_info(app, buffer_id, index);
     return(record_get_new_cursor_position_undo(app, buffer_id, index, record));
 }
 
-internal i32
+internal i64
 record_get_new_cursor_position_redo(Application_Links *app, Buffer_ID buffer_id, History_Record_Index index, Record_Info record){
     i64 new_edit_position = 0;
     switch (record.kind){
@@ -1708,10 +1744,40 @@ record_get_new_cursor_position_redo(Application_Links *app, Buffer_ID buffer_id,
     return((i32)(new_edit_position));
 }
 
-internal i32
+internal i64
 record_get_new_cursor_position_redo(Application_Links *app, Buffer_ID buffer_id, History_Record_Index index){
     Record_Info record = buffer_history_get_record_info(app, buffer_id, index);
     return(record_get_new_cursor_position_redo(app, buffer_id, index, record));
+}
+
+function void
+undo__fade_finish(Application_Links *app, Fade_Range *range){
+    Buffer_ID buffer = range->buffer_id;
+    History_Record_Index current = buffer_history_get_current_state_index(app, buffer);
+    if (current > 0){
+        buffer_history_set_current_state_index(app, buffer, current - 1);
+    }
+}
+
+function void
+undo__flush_fades(Application_Links *app, Buffer_ID buffer){
+    Fade_Range **prev_next = &buffer_fade_ranges.first;
+    for (Fade_Range *node = buffer_fade_ranges.first, *next = 0;
+         node != 0;
+         node = next){
+        next = node->next;
+        if (node->buffer_id == buffer &&
+            node->finish_call == undo__fade_finish){
+            undo__fade_finish(app, node);
+            *prev_next = next;
+            free_fade_range(node);
+            buffer_fade_ranges.count -= 1;
+        }
+        else{
+            prev_next = &node->next;
+            buffer_fade_ranges.last = node;
+        }
+    }
 }
 
 CUSTOM_COMMAND_SIG(undo)
@@ -1719,10 +1785,48 @@ CUSTOM_DOC("Advances backwards through the undo history of the current buffer.")
 {
     View_ID view = get_active_view(app, Access_ReadWriteVisible);
     Buffer_ID buffer = view_get_buffer(app, view, Access_ReadWriteVisible);
+    undo__flush_fades(app, buffer);
+    
     History_Record_Index current = buffer_history_get_current_state_index(app, buffer);
     if (current > 0){
-        i32 new_position = record_get_new_cursor_position_undo(app, buffer, current);
-        buffer_history_set_current_state_index(app, buffer, current - 1);
+        Record_Info record = buffer_history_get_record_info(app, buffer, current);
+        i64 new_position = record_get_new_cursor_position_undo(app, buffer, current, record);
+        
+        b32 do_immedite_undo = true;
+        f32 undo_fade_time = 0.33f;
+        if (global_config.enable_undo_fade_out &&
+            undo_fade_time > 0.f &&
+            record.kind == RecordKind_Single &&
+            record.single_string_backward.size == 0){
+            b32 has_hard_character = false;
+            for (u64 i = 0; i < record.single_string_forward.size; i += 1){
+                if (!character_is_whitespace(record.single_string_forward.str[i])){
+                    has_hard_character = true;
+                    break;
+                }
+            }
+            if (has_hard_character){
+                Range_i64 range = Ii64_size(record.single_first, record.single_string_forward.size);
+                ARGB_Color color = fcolor_resolve(fcolor_id(defcolor_undo)) & 0xFFFFFF;
+                Fade_Range *fade = buffer_post_fade(app, buffer, undo_fade_time, range, color);
+                fade->negate_fade_direction = true;
+                fade->finish_call = undo__fade_finish;
+                do_immedite_undo = false;
+                if (new_position > range.max){
+                    new_position -= range_size(range);
+                }
+            }
+        }
+        
+        if (do_immedite_undo){
+            buffer_history_set_current_state_index(app, buffer, current - 1);
+            if (record.single_string_backward.size > 0){
+                Range_i64 range = Ii64_size(record.single_first, record.single_string_backward.size);
+                ARGB_Color color = fcolor_resolve(fcolor_id(defcolor_undo));
+                buffer_post_fade(app, buffer, undo_fade_time, range, color);
+            }
+        }
+        
         view_set_cursor_and_preferred_x(app, view, seek_pos(new_position));
     }
 }
@@ -1732,11 +1836,23 @@ CUSTOM_DOC("Advances forwards through the undo history of the current buffer.")
 {
     View_ID view = get_active_view(app, Access_ReadWriteVisible);
     Buffer_ID buffer = view_get_buffer(app, view, Access_ReadWriteVisible);
+    undo__flush_fades(app, buffer);
+    
     History_Record_Index current = buffer_history_get_current_state_index(app, buffer);
     History_Record_Index max_index = buffer_history_get_max_record_index(app, buffer);
     if (current < max_index){
-        i32 new_position = record_get_new_cursor_position_redo(app, buffer, current + 1);
+        Record_Info record = buffer_history_get_record_info(app, buffer, current);
+        i64 new_position = record_get_new_cursor_position_redo(app, buffer, current + 1, record);
+        
         buffer_history_set_current_state_index(app, buffer, current + 1);
+        
+        if (record.single_string_forward.size > 0){
+            Range_i64 range = Ii64_size(record.single_first, record.single_string_forward.size);
+            ARGB_Color color = fcolor_resolve(fcolor_id(defcolor_undo));
+            f32 undo_fade_time = 0.33f;
+            buffer_post_fade(app, buffer, undo_fade_time, range, color);
+        }
+        
         view_set_cursor_and_preferred_x(app, view, seek_pos(new_position));
     }
 }
@@ -1744,7 +1860,7 @@ CUSTOM_DOC("Advances forwards through the undo history of the current buffer.")
 CUSTOM_COMMAND_SIG(undo_all_buffers)
 CUSTOM_DOC("Advances backward through the undo history in the buffer containing the most recent regular edit.")
 {
-    Scratch_Block scratch(app, Scratch_Share);
+    Scratch_Block scratch(app);
     i32 highest_edit_number = -1;
     Buffer_ID first_buffer_match = 0;
     Buffer_ID last_buffer_match = 0;
@@ -1772,7 +1888,7 @@ CUSTOM_DOC("Advances backward through the undo history in the buffer containing 
     }
     
     Buffer_ID *match_buffers = push_array(scratch, Buffer_ID, match_count);
-    i32 *new_positions = push_array(scratch, i32, match_count);
+    i64 *new_positions = push_array(scratch, i64, match_count);
     match_count = 0;
     
     if (highest_edit_number != -1){
@@ -1780,7 +1896,7 @@ CUSTOM_DOC("Advances backward through the undo history in the buffer containing 
              buffer != 0;
              buffer = get_buffer_next(app, buffer, Access_Always)){
             b32 did_match = false;
-            i32 new_edit_position = 0;
+            i64 new_edit_position = 0;
             for (;;){
                 History_Record_Index index = buffer_history_get_current_state_index(app, buffer);
                 if (index > 0){
@@ -1815,7 +1931,7 @@ CUSTOM_DOC("Advances backward through the undo history in the buffer containing 
 CUSTOM_COMMAND_SIG(redo_all_buffers)
 CUSTOM_DOC("Advances forward through the undo history in the buffer containing the most recent regular edit.")
 {
-    Scratch_Block scratch(app, Scratch_Share);
+    Scratch_Block scratch(app);
     
     i32 lowest_edit_number = 0x7FFFFFFF;
     Buffer_ID first_buffer_match = 0;
@@ -1845,7 +1961,7 @@ CUSTOM_DOC("Advances forward through the undo history in the buffer containing t
     }
     
     Buffer_ID *match_buffers = push_array(scratch, Buffer_ID, match_count);
-    i32 *new_positions = push_array(scratch, i32, match_count);
+    i64 *new_positions = push_array(scratch, i64, match_count);
     match_count = 0;
     
     if (lowest_edit_number != -1){
@@ -1853,7 +1969,7 @@ CUSTOM_DOC("Advances forward through the undo history in the buffer containing t
              buffer != 0;
              buffer = get_buffer_next(app, buffer, Access_Always)){
             b32 did_match = false;
-            i32 new_edit_position = 0;
+            i64 new_edit_position = 0;
             History_Record_Index max_index = buffer_history_get_max_record_index(app, buffer);
             for (;;){
                 History_Record_Index index = buffer_history_get_current_state_index(app, buffer);

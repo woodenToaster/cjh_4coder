@@ -944,7 +944,7 @@ function b32
 config_compound_compound_member(Config *config, Config_Compound *compound,
                                 String_Const_u8 var_name, i32 index, Config_Compound** var_out){
     Config_Get_Result result = config_compound_member(config, compound, var_name, index);
-    b32 success = result.success && result.type == ConfigRValueType_Compound;
+    b32 success = (result.success && result.type == ConfigRValueType_Compound);
     if (success){
         *var_out = result.compound;
     }
@@ -1235,6 +1235,8 @@ config_init_default(Config_Data *config){
     config->use_comment_keyword = true;
     config->lister_whole_word_backspace_when_modified = false;
     config->show_line_number_margins = false;
+    config->enable_output_wrapping = false;
+    config->enable_undo_fade_out = true;
     
     config->enable_virtual_whitespace = true;
     config->enable_code_wrapping = true;
@@ -1242,10 +1244,15 @@ config_init_default(Config_Data *config){
     config->automatically_save_changes_on_build = true;
     config->automatically_load_project = false;
     
+    config->cursor_roundness = .45f;
+    config->mark_thickness = 2.f;
+    config->lister_roundness = .20f;
+    
     config->virtual_whitespace_regular_indent = 4;
     
     config->indent_with_tabs = false;
     config->indent_width = 4;
+    config->default_tab_width = 4;
     
     config->default_theme_name = SCu8(config->default_theme_name_space, sizeof("4coder") - 1);
     block_copy(config->default_theme_name.str, "4coder", config->default_theme_name.size);
@@ -1301,6 +1308,8 @@ config_parse__data(Application_Links *app, Arena *arena, String_Const_u8 file_na
         config_bool_var(parsed, "use_comment_keyword", 0, &config->use_comment_keyword);
         config_bool_var(parsed, "lister_whole_word_backspace_when_modified", 0, &config->lister_whole_word_backspace_when_modified);
         config_bool_var(parsed, "show_line_number_margins", 0, &config->show_line_number_margins);
+        config_bool_var(parsed, "enable_output_wrapping", 0, &config->enable_output_wrapping);
+        config_bool_var(parsed, "enable_undo_fade_out", 0, &config->enable_undo_fade_out);
         
         
         config_bool_var(parsed, "enable_virtual_whitespace", 0, &config->enable_virtual_whitespace);
@@ -1309,10 +1318,24 @@ config_parse__data(Application_Links *app, Arena *arena, String_Const_u8 file_na
         config_bool_var(parsed, "automatically_save_changes_on_build", 0, &config->automatically_save_changes_on_build);
         config_bool_var(parsed, "automatically_load_project", 0, &config->automatically_load_project);
         
+        {
+            i32 x = 0;
+            if (config_int_var(parsed, "cursor_roundness", 0, &x)){
+                config->cursor_roundness = ((f32)x)*0.01f;
+            }
+            if (config_int_var(parsed, "mark_thickness", 0, &x)){
+                config->mark_thickness = (f32)x;
+            }
+            if (config_int_var(parsed, "lister_roundness", 0, &x)){
+                config->lister_roundness = ((f32)x)*0.01f;
+            }
+        }
+        
         config_int_var(parsed, "virtual_whitespace_regular_indent", 0, &config->virtual_whitespace_regular_indent);
         
         config_bool_var(parsed, "indent_with_tabs", 0, &config->indent_with_tabs);
         config_int_var(parsed, "indent_width", 0, &config->indent_width);
+        config_int_var(parsed, "default_tab_width", 0, &config->default_tab_width);
         
         config_fixed_string_var(parsed, "default_theme_name", 0,
                                 &config->default_theme_name, config->default_theme_name_space);
@@ -1383,7 +1406,7 @@ theme_parse__data(Application_Links *app, Arena *arena, String_Const_u8 file_nam
         for (Config_Assignment *node = parsed->first;
              node != 0;
              node = node->next){
-            Scratch_Block scratch(app);
+            Scratch_Block scratch(app, arena);
             Config_LValue *l = node->l;
             String_Const_u8 l_name = push_string_copy(scratch, l->identifier);
             Managed_ID id = managed_id_get(app, string_u8_litexpr("colors"), l_name);
@@ -1454,8 +1477,8 @@ theme_parse__file_name(Application_Links *app, Arena *arena, char *file_name, Ar
         parsed = theme_parse__data(app, arena, SCu8(file_name), SCu8(data), color_arena, color_table);
     }
     if (parsed == 0){
-        Scratch_Block scratch(app);
-        String_Const_u8 str = push_u8_stringf(arena, "Did not find %s, theme not loaded", file_name);
+        Scratch_Block scratch(app, arena);
+        String_Const_u8 str = push_u8_stringf(scratch, "Did not find %s, theme not loaded", file_name);
         print_message(app, str);
     }
     return(parsed);
@@ -1499,7 +1522,7 @@ config_feedback_int(Arena *arena, List_String_Const_u8 *list, char *name, i32 va
 function void
 load_config_and_apply(Application_Links *app, Arena *out_arena, Config_Data *config,
                       i32 override_font_size, b32 override_hinting){
-    Scratch_Block scratch(app);
+    Scratch_Block scratch(app, out_arena);
     
     linalloc_clear(out_arena);
     Config *parsed = config_parse__file_name(app, out_arena, "config.4coder", config);
@@ -1552,6 +1575,12 @@ load_config_and_apply(Application_Links *app, Arena *out_arena, Config_Data *con
         config_feedback_bool(scratch, &list, "use_comment_keyword", config->use_comment_keyword);
         config_feedback_bool(scratch, &list, "lister_whole_word_backspace_when_modified", config->lister_whole_word_backspace_when_modified);
         config_feedback_bool(scratch, &list, "show_line_number_margins", config->show_line_number_margins);
+        config_feedback_bool(scratch, &list, "enable_output_wrapping", config->enable_output_wrapping);
+        config_feedback_bool(scratch, &list, "enable_undo_fade_out", config->enable_undo_fade_out);
+        
+        config_feedback_int(scratch, &list, "cursor_roundness", (i32)(config->cursor_roundness*100.f));
+        config_feedback_int(scratch, &list, "mark_thickness", (i32)(config->mark_thickness));
+        config_feedback_int(scratch, &list, "lister_roundness", (i32)(config->lister_roundness*100.f));
         
         config_feedback_bool(scratch, &list, "enable_virtual_whitespace", config->enable_virtual_whitespace);
         config_feedback_int(scratch, &list, "virtual_whitespace_regular_indent", config->virtual_whitespace_regular_indent);
@@ -1562,6 +1591,7 @@ load_config_and_apply(Application_Links *app, Arena *out_arena, Config_Data *con
         
         config_feedback_bool(scratch, &list, "indent_with_tabs", config->indent_with_tabs);
         config_feedback_int(scratch, &list, "indent_width", config->indent_width);
+        config_feedback_int(scratch, &list, "default_tab_width", config->default_tab_width);
         
         config_feedback_string(scratch, &list, "default_theme_name", config->default_theme_name);
         config_feedback_bool(scratch, &list, "highlight_line_at_cursor", config->highlight_line_at_cursor);
@@ -1611,7 +1641,7 @@ function void
 load_theme_file_into_live_set(Application_Links *app, char *file_name){
     Arena *arena = &global_theme_arena;
     Color_Table color_table = make_color_table(app, arena);
-    Scratch_Block scratch(app);
+    Scratch_Block scratch(app, arena);
     Config *config = theme_parse__file_name(app, scratch, file_name, arena, &color_table);
     String_Const_u8 error_text = config_stringize_errors(app, scratch, config);
     print_message(app, error_text);
@@ -1670,7 +1700,7 @@ CUSTOM_DOC("Parse the current buffer as a theme file and add the theme to the th
 
 function void
 load_folder_of_themes_into_live_set(Application_Links *app, String_Const_u8 path){
-    Scratch_Block scratch(app, Scratch_Share);
+    Scratch_Block scratch(app);
     
     File_List list = system_get_file_list(scratch, path);
     for (File_Info **ptr = list.infos, **end = list.infos + list.count;
