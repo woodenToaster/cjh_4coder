@@ -61,6 +61,7 @@
 // - Switch to normal mode after `V /`
 // - `d w` deletes whitespace and next word.
 // - `, h` should save previous buffer so `SPC TAB` works
+// - Highlighting is wrong in compilation buffer
 
 #if !defined(FCODER_CHOGAN_BINDINGS_CPP)
 #define FCODER_CHOGAN_BINDINGS_CPP
