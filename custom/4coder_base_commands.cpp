@@ -287,6 +287,7 @@ CUSTOM_DOC("If the mouse left button is pressed, sets the cursor position to the
         view_set_cursor_and_preferred_x(app, view, seek_pos(pos));
     }
     no_mark_snap_to_cursor(app, view);
+    set_next_rewrite(app, view, Rewrite_NoChange);
 }
 
 CUSTOM_COMMAND_SIG(click_set_mark)
@@ -309,7 +310,9 @@ CUSTOM_DOC("Reads the scroll wheel value from the mouse state and scrolls accord
         scroll.target = view_move_buffer_point(app, view, scroll.target, V2f32(0.f, (f32)mouse.wheel));
         view_set_buffer_scroll(app, view, scroll, SetBufferScroll_SnapCursorIntoView);
     }
-    no_mark_snap_to_cursor(app, view);
+    if (mouse.l){
+        no_mark_snap_to_cursor(app, view);
+    }
 }
 
 ////////////////////////////////
@@ -925,6 +928,14 @@ isearch(Application_Links *app, Scan_Direction start_scan, i64 first_pos,
         return;
     }
     
+    Vec2_f32 old_margin = {};
+    Vec2_f32 old_push_in = {};
+    view_get_camera_bounds(app, view, &old_margin, &old_push_in);
+    
+    Vec2_f32 margin = old_margin;
+    margin.y = clamp_bot(200.f, margin.y);
+    view_set_camera_bounds(app, view, margin, old_push_in);
+    
     Scan_Direction scan = start_scan;
     i64 pos = first_pos;
     
@@ -1101,6 +1112,8 @@ isearch(Application_Links *app, Scan_Direction start_scan, i64 first_pos,
         previous_isearch_query[size] = 0;
         view_set_cursor_and_preferred_x(app, view, seek_pos(first_pos));
     }
+    
+    view_set_camera_bounds(app, view, old_margin, old_push_in);
 }
 
 function void
@@ -1349,6 +1362,35 @@ CUSTOM_DOC("Queries the user for a string, and incrementally replace every occur
         String_Const_u8 replace = push_buffer_range(app, scratch, buffer, range);
         if (replace.size != 0){
             query_replace_parameter(app, replace, range.min, true);
+        }
+    }
+}
+
+////////////////////////////////
+
+CUSTOM_COMMAND_SIG(jump_to_last_point)
+CUSTOM_DOC("Read from the top of the point stack and jump there; if already there pop the top and go to the next option")
+{
+    View_ID view = get_active_view(app, Access_Visible);
+    if (view != 0){
+        Buffer_ID buffer = view_get_buffer(app, view, Access_Always);
+        i64 pos = view_get_cursor_pos(app, view);
+        
+        for (;;){
+            Buffer_ID stack_buffer = 0;
+            i64 stack_pos = 0;
+            if (point_stack_read_top(app, &stack_buffer, &stack_pos)){
+                if (stack_buffer != 0 &&
+                    (stack_buffer != buffer || stack_pos != pos)){
+                    view_set_buffer(app, view, stack_buffer, 0);
+                    view_set_cursor_and_preferred_x(app, view, seek_pos(stack_pos));
+                    break;
+                }
+                point_stack_pop(app);
+            }
+            else{
+                break;
+            }
         }
     }
 }

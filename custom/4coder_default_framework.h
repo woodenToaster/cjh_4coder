@@ -12,6 +12,7 @@
 typedef i64 Rewrite_Type;
 enum{
     Rewrite_None,
+    Rewrite_NoChange,
     Rewrite_Paste,
     Rewrite_WordComplete
 };
@@ -50,6 +51,21 @@ struct Parsed_Jump{
 struct ID_Pos_Jump_Location_Array{
     struct ID_Pos_Jump_Location *jumps;
     i32 count;
+};
+
+////////////////////////////////
+
+#define POINT_STACK_DEPTH 100
+
+struct Point_Stack_Slot{
+    Buffer_ID buffer;
+    Managed_Object object;
+};
+
+struct Point_Stack{
+    Point_Stack_Slot markers[POINT_STACK_DEPTH + 1];
+    i32 top;
+    i32 bot;
 };
 
 ////////////////////////////////
