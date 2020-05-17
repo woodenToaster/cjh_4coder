@@ -82,6 +82,8 @@ api(custom) function b32 view_set_setting(Application_Links* app, View_ID view_i
 api(custom) function Managed_Scope view_get_managed_scope(Application_Links* app, View_ID view_id);
 api(custom) function Buffer_Cursor buffer_compute_cursor(Application_Links* app, Buffer_ID buffer, Buffer_Seek seek);
 api(custom) function Buffer_Cursor view_compute_cursor(Application_Links* app, View_ID view_id, Buffer_Seek seek);
+api(custom) function b32 view_set_camera_bounds(Application_Links* app, View_ID view_id, Vec2_f32 margin, Vec2_f32 push_in_multiplier);
+api(custom) function b32 view_get_camera_bounds(Application_Links* app, View_ID view_id, Vec2_f32* margin, Vec2_f32* push_in_multiplier);
 api(custom) function b32 view_set_cursor(Application_Links* app, View_ID view_id, Buffer_Seek seek);
 api(custom) function b32 view_set_buffer_scroll(Application_Links* app, View_ID view_id, Buffer_Scroll scroll, Set_Buffer_Scroll_Rule rule);
 api(custom) function b32 view_set_mark(Application_Links* app, View_ID view_id, Buffer_Seek seek);
@@ -114,7 +116,7 @@ api(custom) function Managed_Scope managed_object_get_containing_scope(Applicati
 api(custom) function b32 managed_object_free(Application_Links* app, Managed_Object object);
 api(custom) function b32 managed_object_store_data(Application_Links* app, Managed_Object object, u32 first_index, u32 count, void* mem);
 api(custom) function b32 managed_object_load_data(Application_Links* app, Managed_Object object, u32 first_index, u32 count, void* mem_out);
-api(custom) function User_Input get_next_input(Application_Links* app, Event_Property get_properties, Event_Property abort_properties);
+api(custom) function User_Input get_next_input_raw(Application_Links* app);
 api(custom) function i64 get_current_input_sequence_number(Application_Links* app);
 api(custom) function User_Input get_current_input(Application_Links* app);
 api(custom) function void set_current_input(Application_Links* app, User_Input* input);

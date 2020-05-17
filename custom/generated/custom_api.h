@@ -82,6 +82,8 @@
 #define custom_view_get_managed_scope_sig() Managed_Scope custom_view_get_managed_scope(Application_Links* app, View_ID view_id)
 #define custom_buffer_compute_cursor_sig() Buffer_Cursor custom_buffer_compute_cursor(Application_Links* app, Buffer_ID buffer, Buffer_Seek seek)
 #define custom_view_compute_cursor_sig() Buffer_Cursor custom_view_compute_cursor(Application_Links* app, View_ID view_id, Buffer_Seek seek)
+#define custom_view_set_camera_bounds_sig() b32 custom_view_set_camera_bounds(Application_Links* app, View_ID view_id, Vec2_f32 margin, Vec2_f32 push_in_multiplier)
+#define custom_view_get_camera_bounds_sig() b32 custom_view_get_camera_bounds(Application_Links* app, View_ID view_id, Vec2_f32* margin, Vec2_f32* push_in_multiplier)
 #define custom_view_set_cursor_sig() b32 custom_view_set_cursor(Application_Links* app, View_ID view_id, Buffer_Seek seek)
 #define custom_view_set_buffer_scroll_sig() b32 custom_view_set_buffer_scroll(Application_Links* app, View_ID view_id, Buffer_Scroll scroll, Set_Buffer_Scroll_Rule rule)
 #define custom_view_set_mark_sig() b32 custom_view_set_mark(Application_Links* app, View_ID view_id, Buffer_Seek seek)
@@ -114,7 +116,7 @@
 #define custom_managed_object_free_sig() b32 custom_managed_object_free(Application_Links* app, Managed_Object object)
 #define custom_managed_object_store_data_sig() b32 custom_managed_object_store_data(Application_Links* app, Managed_Object object, u32 first_index, u32 count, void* mem)
 #define custom_managed_object_load_data_sig() b32 custom_managed_object_load_data(Application_Links* app, Managed_Object object, u32 first_index, u32 count, void* mem_out)
-#define custom_get_next_input_sig() User_Input custom_get_next_input(Application_Links* app, Event_Property get_properties, Event_Property abort_properties)
+#define custom_get_next_input_raw_sig() User_Input custom_get_next_input_raw(Application_Links* app)
 #define custom_get_current_input_sequence_number_sig() i64 custom_get_current_input_sequence_number(Application_Links* app)
 #define custom_get_current_input_sig() User_Input custom_get_current_input(Application_Links* app)
 #define custom_set_current_input_sig() void custom_set_current_input(Application_Links* app, User_Input* input)
@@ -259,6 +261,8 @@ typedef b32 custom_view_set_setting_type(Application_Links* app, View_ID view_id
 typedef Managed_Scope custom_view_get_managed_scope_type(Application_Links* app, View_ID view_id);
 typedef Buffer_Cursor custom_buffer_compute_cursor_type(Application_Links* app, Buffer_ID buffer, Buffer_Seek seek);
 typedef Buffer_Cursor custom_view_compute_cursor_type(Application_Links* app, View_ID view_id, Buffer_Seek seek);
+typedef b32 custom_view_set_camera_bounds_type(Application_Links* app, View_ID view_id, Vec2_f32 margin, Vec2_f32 push_in_multiplier);
+typedef b32 custom_view_get_camera_bounds_type(Application_Links* app, View_ID view_id, Vec2_f32* margin, Vec2_f32* push_in_multiplier);
 typedef b32 custom_view_set_cursor_type(Application_Links* app, View_ID view_id, Buffer_Seek seek);
 typedef b32 custom_view_set_buffer_scroll_type(Application_Links* app, View_ID view_id, Buffer_Scroll scroll, Set_Buffer_Scroll_Rule rule);
 typedef b32 custom_view_set_mark_type(Application_Links* app, View_ID view_id, Buffer_Seek seek);
@@ -291,7 +295,7 @@ typedef Managed_Scope custom_managed_object_get_containing_scope_type(Applicatio
 typedef b32 custom_managed_object_free_type(Application_Links* app, Managed_Object object);
 typedef b32 custom_managed_object_store_data_type(Application_Links* app, Managed_Object object, u32 first_index, u32 count, void* mem);
 typedef b32 custom_managed_object_load_data_type(Application_Links* app, Managed_Object object, u32 first_index, u32 count, void* mem_out);
-typedef User_Input custom_get_next_input_type(Application_Links* app, Event_Property get_properties, Event_Property abort_properties);
+typedef User_Input custom_get_next_input_raw_type(Application_Links* app);
 typedef i64 custom_get_current_input_sequence_number_type(Application_Links* app);
 typedef User_Input custom_get_current_input_type(Application_Links* app);
 typedef void custom_set_current_input_type(Application_Links* app, User_Input* input);
@@ -437,6 +441,8 @@ custom_view_set_setting_type *view_set_setting;
 custom_view_get_managed_scope_type *view_get_managed_scope;
 custom_buffer_compute_cursor_type *buffer_compute_cursor;
 custom_view_compute_cursor_type *view_compute_cursor;
+custom_view_set_camera_bounds_type *view_set_camera_bounds;
+custom_view_get_camera_bounds_type *view_get_camera_bounds;
 custom_view_set_cursor_type *view_set_cursor;
 custom_view_set_buffer_scroll_type *view_set_buffer_scroll;
 custom_view_set_mark_type *view_set_mark;
@@ -469,7 +475,7 @@ custom_managed_object_get_containing_scope_type *managed_object_get_containing_s
 custom_managed_object_free_type *managed_object_free;
 custom_managed_object_store_data_type *managed_object_store_data;
 custom_managed_object_load_data_type *managed_object_load_data;
-custom_get_next_input_type *get_next_input;
+custom_get_next_input_raw_type *get_next_input_raw;
 custom_get_current_input_sequence_number_type *get_current_input_sequence_number;
 custom_get_current_input_type *get_current_input;
 custom_set_current_input_type *set_current_input;
@@ -616,6 +622,8 @@ internal b32 view_set_setting(Application_Links* app, View_ID view_id, View_Sett
 internal Managed_Scope view_get_managed_scope(Application_Links* app, View_ID view_id);
 internal Buffer_Cursor buffer_compute_cursor(Application_Links* app, Buffer_ID buffer, Buffer_Seek seek);
 internal Buffer_Cursor view_compute_cursor(Application_Links* app, View_ID view_id, Buffer_Seek seek);
+internal b32 view_set_camera_bounds(Application_Links* app, View_ID view_id, Vec2_f32 margin, Vec2_f32 push_in_multiplier);
+internal b32 view_get_camera_bounds(Application_Links* app, View_ID view_id, Vec2_f32* margin, Vec2_f32* push_in_multiplier);
 internal b32 view_set_cursor(Application_Links* app, View_ID view_id, Buffer_Seek seek);
 internal b32 view_set_buffer_scroll(Application_Links* app, View_ID view_id, Buffer_Scroll scroll, Set_Buffer_Scroll_Rule rule);
 internal b32 view_set_mark(Application_Links* app, View_ID view_id, Buffer_Seek seek);
@@ -648,7 +656,7 @@ internal Managed_Scope managed_object_get_containing_scope(Application_Links* ap
 internal b32 managed_object_free(Application_Links* app, Managed_Object object);
 internal b32 managed_object_store_data(Application_Links* app, Managed_Object object, u32 first_index, u32 count, void* mem);
 internal b32 managed_object_load_data(Application_Links* app, Managed_Object object, u32 first_index, u32 count, void* mem_out);
-internal User_Input get_next_input(Application_Links* app, Event_Property get_properties, Event_Property abort_properties);
+internal User_Input get_next_input_raw(Application_Links* app);
 internal i64 get_current_input_sequence_number(Application_Links* app);
 internal User_Input get_current_input(Application_Links* app);
 internal void set_current_input(Application_Links* app, User_Input* input);
@@ -795,6 +803,8 @@ global custom_view_set_setting_type *view_set_setting = 0;
 global custom_view_get_managed_scope_type *view_get_managed_scope = 0;
 global custom_buffer_compute_cursor_type *buffer_compute_cursor = 0;
 global custom_view_compute_cursor_type *view_compute_cursor = 0;
+global custom_view_set_camera_bounds_type *view_set_camera_bounds = 0;
+global custom_view_get_camera_bounds_type *view_get_camera_bounds = 0;
 global custom_view_set_cursor_type *view_set_cursor = 0;
 global custom_view_set_buffer_scroll_type *view_set_buffer_scroll = 0;
 global custom_view_set_mark_type *view_set_mark = 0;
@@ -827,7 +837,7 @@ global custom_managed_object_get_containing_scope_type *managed_object_get_conta
 global custom_managed_object_free_type *managed_object_free = 0;
 global custom_managed_object_store_data_type *managed_object_store_data = 0;
 global custom_managed_object_load_data_type *managed_object_load_data = 0;
-global custom_get_next_input_type *get_next_input = 0;
+global custom_get_next_input_raw_type *get_next_input_raw = 0;
 global custom_get_current_input_sequence_number_type *get_current_input_sequence_number = 0;
 global custom_get_current_input_type *get_current_input = 0;
 global custom_set_current_input_type *set_current_input = 0;

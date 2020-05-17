@@ -137,14 +137,17 @@ list_all_locations__generic(Application_Links *app, String_Const_u8_Array needle
 
 internal void
 list_all_locations__generic(Application_Links *app, String_Const_u8 needle, List_All_Locations_Flag flags){
-    String_Const_u8_Array array = {&needle, 1};
-    list_all_locations__generic(app, array, flags);
+    if (needle.size != 0){
+        String_Const_u8_Array array = {&needle, 1};
+        list_all_locations__generic(app, array, flags);
+    }
 }
 
 internal void
 list_all_locations__generic_query(Application_Links *app, List_All_Locations_Flag flags){
     Scratch_Block scratch(app);
-    String_Const_u8 needle = query_user_list_needle(app, scratch);
+    u8 *space = push_array(scratch, u8, KB(1));
+    String_Const_u8 needle = get_query_string(app, "List Locations For: ", space, KB(1));
     list_all_locations__generic(app, needle, flags);
 }
 
@@ -302,34 +305,64 @@ word_complete_list_extend_from_raw(Application_Links *app, Arena *arena, String_
 }
 
 function void
+word_complete_iter_init__inner(Buffer_ID buffer, String_Const_u8 needle, Range_i64 range, Word_Complete_Iterator *iter){
+    Application_Links *app = iter->app;
+    Arena *arena = iter->arena;
+    
+    Base_Allocator *allocator = get_base_allocator_system();
+    if (iter->already_used_table.allocator != 0){
+        end_temp(iter->arena_restore);
+        table_clear(&iter->already_used_table);
+    }
+    
+    block_zero_struct(iter);
+    iter->app = app;
+    iter->arena = arena;
+    
+    iter->arena_restore = begin_temp(arena);
+    iter->needle = push_string_copy(arena, needle);
+    iter->first_buffer = buffer;
+    iter->current_buffer = buffer;
+    
+    Scratch_Block scratch(app, arena);
+    String_Match_List list = get_complete_list_raw(app, scratch, buffer, range, needle);
+    
+    iter->already_used_table = make_table_Data_u64(allocator, 100);
+    word_complete_list_extend_from_raw(app, arena, &list, &iter->list, &iter->already_used_table);
+    
+    iter->scan_all_buffers = true;
+}
+
+function void
 word_complete_iter_init(Buffer_ID buffer, Range_i64 range, Word_Complete_Iterator *iter){
     if (iter->app != 0 && iter->arena != 0){
-        Base_Allocator *allocator = get_base_allocator_system();
-        
         Application_Links *app = iter->app;
         Arena *arena = iter->arena;
-        
-        if (iter->already_used_table.allocator != 0){
-            end_temp(iter->arena_restore);
-            table_clear(&iter->already_used_table);
-        }
-        
-        block_zero_struct(iter);
-        iter->app = app;
-        iter->arena = arena;
-        
-        Scratch_Block scratch(app);
-        String_Const_u8 needle = push_buffer_range(app, arena, buffer, range);
-        String_Match_List list = get_complete_list_raw(app, scratch, buffer, range, needle);
-        
-        iter->arena_restore = begin_temp(arena);
-        iter->first_buffer = buffer;
-        iter->current_buffer = buffer;
-        iter->needle = needle;
-        
-        iter->already_used_table = make_table_Data_u64(allocator, 100);
-        word_complete_list_extend_from_raw(app, arena, &list, &iter->list, &iter->already_used_table);
+        Scratch_Block scratch(app, arena);
+        String_Const_u8 needle = push_buffer_range(app, scratch, buffer, range);
+        word_complete_iter_init__inner(buffer, needle, range, iter);
     }
+}
+
+function void
+word_complete_iter_init(Buffer_ID first_buffer, String_Const_u8 needle, Word_Complete_Iterator *iter){
+    if (iter->app != 0 && iter->arena != 0){
+        word_complete_iter_init__inner(first_buffer, needle, Ii64(), iter);
+    }
+}
+
+function void
+word_complete_iter_init(String_Const_u8 needle, Word_Complete_Iterator *iter){
+    if (iter->app != 0 && iter->arena != 0){
+        Application_Links *app = iter->app;
+        Buffer_ID first_buffer = get_buffer_next(app, 0, Access_Read);
+        word_complete_iter_init__inner(first_buffer, needle, Ii64(), iter);
+    }
+}
+
+function void
+word_complete_iter_stop_on_this_buffer(Word_Complete_Iterator *iter){
+    iter->scan_all_buffers = false;
 }
 
 function void
@@ -343,6 +376,10 @@ word_complete_iter_next(Word_Complete_Iterator *it){
         }
         
         if (it->node != 0){
+            break;
+        }
+        
+        if (!it->scan_all_buffers){
             break;
         }
         
@@ -410,8 +447,7 @@ CUSTOM_DOC("Iteratively tries completing the word to the left of the cursor with
             first_completion = true;
         }
         
-        Rewrite_Type *next_rewrite = scope_attachment(app, scope, view_next_rewrite_loc, Rewrite_Type);
-        *next_rewrite = Rewrite_WordComplete;
+        set_next_rewrite(app, view, Rewrite_WordComplete);
         
         Word_Complete_Iterator *it = word_complete_get_shared_iter(app);
         local_persist b32 initialized = false;

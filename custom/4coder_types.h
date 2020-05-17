@@ -419,7 +419,7 @@ struct Buffer_Cursor{
 };
 
 api(custom)
-struct Range_Cursor{
+union Range_Cursor{
     struct{
         Buffer_Cursor min;
         Buffer_Cursor max;
@@ -469,7 +469,6 @@ api(custom)
 typedef u32 Glyph_Flag;
 enum{
     GlyphFlag_None = 0x0,
-    GlyphFlag_Rotate90 = 0x1,
 };
 
 api(custom)
