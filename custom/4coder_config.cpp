@@ -4,9 +4,42 @@
 
 // TOP
 
+////////////////////////////////
+// NOTE(allen): Config Search List
+
+function void
+def_search_normal_load_list(Arena *arena, String8List *list){
+    Variable_Handle prj_var = vars_read_key(vars_get_root(), vars_save_string_lit("prj_config"));
+    String_Const_u8 prj_dir = prj_path_from_project(arena, prj_var);
+    if (prj_dir.size > 0){
+        string_list_push(arena, list, prj_dir);
+    }
+    def_search_list_add_system_path(arena, list, SystemPath_UserDirectory);
+    def_search_list_add_system_path(arena, list, SystemPath_Binary);
+}
+
+function String8
+def_search_normal_full_path(Arena *arena, String8 relative){
+    String8List list = {};
+    def_search_normal_load_list(arena, &list);
+    String8 result = def_search_get_full_path(arena, &list, relative);
+    return(result);
+}
+
+function FILE*
+def_search_normal_fopen(Arena *arena, char *file_name, char *opt){
+    Temp_Memory_Block block(arena);
+    String8List list = {};
+    def_search_normal_load_list(arena, &list);
+    FILE *file = def_search_fopen(arena, &list, file_name, opt);
+    return(file);
+}
+
+////////////////////////////////
+// NOTE(allen): Extension List
+
 function String_Const_u8_Array
-parse_extension_line_to_extension_list(Application_Links *app,
-                                       Arena *arena, String_Const_u8 str){
+parse_extension_line_to_extension_list(Application_Links *app, Arena *arena, String_Const_u8 str){
     ProfileScope(app, "parse extension line to extension list");
     i32 count = 0;
     for (u64 i = 0; i < str.size; i += 1){
@@ -33,6 +66,17 @@ parse_extension_line_to_extension_list(Application_Links *app,
 }
 
 ////////////////////////////////
+// NOTE(allen): Token Array
+
+function Token_Array
+token_array_from_text(Application_Links *app, Arena *arena, String_Const_u8 data){
+    ProfileScope(app, "token array from text");
+    Token_List list = lex_full_input_cpp(arena, data);
+    return(token_array_from_list(arena, &list));
+}
+
+////////////////////////////////
+// NOTE(allen): Built in Mapping
 
 function void
 setup_built_in_mapping(Application_Links *app, String_Const_u8 name, Mapping *mapping, i64 global_id, i64 file_id, i64 code_id){
@@ -59,6 +103,7 @@ setup_built_in_mapping(Application_Links *app, String_Const_u8 name, Mapping *ma
 }
 
 ////////////////////////////////
+// NOTE(allen): Errors
 
 function Error_Location
 get_error_location(Application_Links *app, u8 *base, u8 *pos){
@@ -99,35 +144,40 @@ config_stringize_errors(Application_Links *app, Arena *arena, Config *parsed){
 }
 
 ////////////////////////////////
+// NOTE(allen): Parser
+
+function Config_Parser
+def_config_parser_init(Arena *arena, String_Const_u8 file_name, String_Const_u8 data, Token_Array array){
+    Config_Parser ctx = {};
+    ctx.token = array.tokens - 1;
+    ctx.opl = array.tokens + array.count;
+    ctx.file_name = file_name;
+    ctx.data = data;
+    ctx.arena = arena;
+    def_config_parser_inc(&ctx);
+    return(ctx);
+}
 
 function void
-config_parser__advance_to_next(Config_Parser *ctx){
+def_config_parser_inc(Config_Parser *ctx){
     Token *t = ctx->token;
-    Token *e = ctx->end;
+    Token *opl = ctx->opl;
     for (t += 1;
-         t < e && (t->kind == TokenBaseKind_Comment ||
-                   t->kind == TokenBaseKind_Whitespace);
+         t < opl && (t->kind == TokenBaseKind_Comment ||
+                     t->kind == TokenBaseKind_Whitespace);
          t += 1);
     ctx->token = t;
 }
 
-function Config_Parser
-make_config_parser(Arena *arena, String_Const_u8 file_name, String_Const_u8 data, Token_Array array){
-    Config_Parser ctx = {};
-    ctx.start = array.tokens;
-    ctx.token = ctx.start - 1;
-    ctx.end = ctx.start + array.count;
-    ctx.file_name = file_name;
-    ctx.data = data;
-    ctx.arena = arena;
-    config_parser__advance_to_next(&ctx);
-    return(ctx);
+function u8*
+def_config_parser_get_pos(Config_Parser *ctx){
+    return(ctx->data.str + ctx->token->pos);
 }
 
 function b32
-config_parser__recognize_base_token(Config_Parser *ctx, Token_Base_Kind kind){
+def_config_parser_recognize_base_kind(Config_Parser *ctx, Token_Base_Kind kind){
     b32 result = false;
-    if (ctx->start <= ctx->token && ctx->token < ctx->end){
+    if (ctx->token < ctx->opl){
         result = (ctx->token->kind == kind);
     }
     else if (kind == TokenBaseKind_EOF){
@@ -137,9 +187,9 @@ config_parser__recognize_base_token(Config_Parser *ctx, Token_Base_Kind kind){
 }
 
 function b32
-config_parser__recognize_token(Config_Parser *ctx, Token_Cpp_Kind kind){
+def_config_parser_recognize_cpp_kind(Config_Parser *ctx, Token_Cpp_Kind kind){
     b32 result = false;
-    if (ctx->start <= ctx->token && ctx->token < ctx->end){
+    if (ctx->token < ctx->opl){
         result = (ctx->token->sub_kind == kind);
     }
     else if (kind == TokenCppKind_EOF){
@@ -149,30 +199,54 @@ config_parser__recognize_token(Config_Parser *ctx, Token_Cpp_Kind kind){
 }
 
 function b32
-config_parser__recognize_boolean(Config_Parser *ctx){
+def_config_parser_recognize_boolean(Config_Parser *ctx){
     b32 result = false;
     Token *token = ctx->token;
-    if (ctx->start <= ctx->token && ctx->token < ctx->end){
+    if (ctx->token < ctx->opl){
         result = (token->sub_kind == TokenCppKind_LiteralTrue ||
                   token->sub_kind == TokenCppKind_LiteralFalse);
     }
     return(result);
 }
 
+function b32
+def_config_parser_recognize_text(Config_Parser *ctx, String_Const_u8 text){
+    String_Const_u8 lexeme = def_config_parser_get_lexeme(ctx);
+    return(lexeme.str != 0 && string_match(lexeme, text));
+}
+
+function b32
+def_config_parser_match_cpp_kind(Config_Parser *ctx, Token_Cpp_Kind kind){
+    b32 result = def_config_parser_recognize_cpp_kind(ctx, kind);
+    if (result){
+        def_config_parser_inc(ctx);
+    }
+    return(result);
+}
+
+function b32
+def_config_parser_match_text(Config_Parser *ctx, String_Const_u8 text){
+    b32 result = def_config_parser_recognize_text(ctx, text);
+    if (result){
+        def_config_parser_inc(ctx);
+    }
+    return(result);
+}
+
 function String_Const_u8
-config_parser__get_lexeme(Config_Parser *ctx){
+def_config_parser_get_lexeme(Config_Parser *ctx){
     String_Const_u8 lexeme = {};
     Token *token = ctx->token;
-    if (ctx->start <= token && token < ctx->end){
+    if (token < ctx->opl){
         lexeme = SCu8(ctx->data.str + token->pos, token->size);
     }
     return(lexeme);
 }
 
 function Config_Integer
-config_parser__get_int(Config_Parser *ctx){
+def_config_parser_get_int(Config_Parser *ctx){
     Config_Integer config_integer = {};
-    String_Const_u8 str = config_parser__get_lexeme(ctx);
+    String_Const_u8 str = def_config_parser_get_lexeme(ctx);
     if (string_match(string_prefix(str, 2), string_u8_litexpr("0x"))){
         config_integer.is_signed = false;
         config_integer.uinteger = (u32)(string_to_integer(string_skip(str, 2), 16));
@@ -192,95 +266,20 @@ config_parser__get_int(Config_Parser *ctx){
 }
 
 function b32
-config_parser__get_boolean(Config_Parser *ctx){
-    String_Const_u8 str = config_parser__get_lexeme(ctx);
+def_config_parser_get_boolean(Config_Parser *ctx){
+    String_Const_u8 str = def_config_parser_get_lexeme(ctx);
     return(string_match(str, string_u8_litexpr("true")));
 }
 
-function b32
-config_parser__recognize_text(Config_Parser *ctx, String_Const_u8 text){
-    String_Const_u8 lexeme = config_parser__get_lexeme(ctx);
-    return(lexeme.str != 0 && string_match(lexeme, text));
-}
-
-function b32
-config_parser__match_token(Config_Parser *ctx, Token_Cpp_Kind kind){
-    b32 result = config_parser__recognize_token(ctx, kind);
-    if (result){
-        config_parser__advance_to_next(ctx);
-    }
-    return(result);
-}
-
-function b32
-config_parser__match_text(Config_Parser *ctx, String_Const_u8 text){
-    b32 result = config_parser__recognize_text(ctx, text);
-    if (result){
-        config_parser__advance_to_next(ctx);
-    }
-    return(result);
-}
-
-#define config_parser__match_text_lit(c,s) config_parser__match_text((c), string_u8_litexpr(s))
-
-function Config                  *config_parser__config    (Config_Parser *ctx);
-function i32                     *config_parser__version   (Config_Parser *ctx);
-function Config_Assignment       *config_parser__assignment(Config_Parser *ctx);
-function Config_LValue           *config_parser__lvalue    (Config_Parser *ctx);
-function Config_RValue           *config_parser__rvalue    (Config_Parser *ctx);
-function Config_Compound         *config_parser__compound  (Config_Parser *ctx);
-function Config_Compound_Element *config_parser__element   (Config_Parser *ctx);
-
 function Config*
-config_parse(Application_Links *app, Arena *arena, String_Const_u8 file_name,
-             String_Const_u8 data, Token_Array array){
-    ProfileScope(app, "config parse");
-    Temp_Memory restore_point = begin_temp(arena);
-    Config_Parser ctx = make_config_parser(arena, file_name, data, array);
-    Config *config = config_parser__config(&ctx);
-    if (config == 0){
-        end_temp(restore_point);
-    }
-    return(config);
-}
-
-// TODO(allen): Move to string library
-function Config_Error*
-config_error_push(Arena *arena, Config_Error_List *list, String_Const_u8 file_name,
-                  u8 *pos, char *error_text){
-    Config_Error *error = push_array(arena, Config_Error, 1);
-    zdll_push_back(list->first, list->last, error);
-    list->count += 1;
-    error->file_name = file_name;
-    error->pos = pos;
-    error->text = push_string_copy(arena, SCu8(error_text));
-    return(error);
-}
-
-function u8*
-config_parser__get_pos(Config_Parser *ctx){
-    return(ctx->data.str + ctx->token->pos);
-}
-
-function void
-config_parser__log_error_pos(Config_Parser *ctx, u8 *pos, char *error_text){
-    config_error_push(ctx->arena, &ctx->errors, ctx->file_name, pos, error_text);
-}
-
-function void
-config_parser__log_error(Config_Parser *ctx, char *error_text){
-    config_parser__log_error_pos(ctx, config_parser__get_pos(ctx), error_text);
-}
-
-function Config*
-config_parser__config(Config_Parser *ctx){
-    i32 *version = config_parser__version(ctx);
+def_config_parser_top(Config_Parser *ctx){
+    i32 *version = def_config_parser_version(ctx);
     
     Config_Assignment *first = 0;
     Config_Assignment *last = 0;
     i32 count = 0;
-    for (;!config_parser__recognize_token(ctx, TokenCppKind_EOF);){
-        Config_Assignment *assignment = config_parser__assignment(ctx);
+    for (;!def_config_parser_recognize_cpp_kind(ctx, TokenCppKind_EOF);){
+        Config_Assignment *assignment = def_config_parser_assignment(ctx);
         if (assignment != 0){
             zdll_push_back(first, last, assignment);
             count += 1;
@@ -299,47 +298,34 @@ config_parser__config(Config_Parser *ctx){
     return(config);
 }
 
-function void
-config_parser__recover_parse(Config_Parser *ctx){
-    for (;;){
-        if (config_parser__match_token(ctx, TokenCppKind_Semicolon)){
-            break;
-        }
-        if (config_parser__recognize_token(ctx, TokenCppKind_EOF)){
-            break;
-        }
-        config_parser__advance_to_next(ctx);
-    }
-}
-
 function i32*
-config_parser__version(Config_Parser *ctx){
-    require(config_parser__match_text_lit(ctx, "version"));
+def_config_parser_version(Config_Parser *ctx){
+    require(def_config_parser_match_text(ctx, str8_lit("version")));
     
-    if (!config_parser__match_token(ctx, TokenCppKind_ParenOp)){
-        config_parser__log_error(ctx, "expected token '(' for version specifier: 'version(#)'");
-        config_parser__recover_parse(ctx);
+    if (!def_config_parser_match_cpp_kind(ctx, TokenCppKind_ParenOp)){
+        def_config_parser_push_error_here(ctx, "expected token '(' for version specifier: 'version(#)'");
+        def_config_parser_recover(ctx);
         return(0);
     }
     
-    if (!config_parser__recognize_base_token(ctx, TokenBaseKind_LiteralInteger)){
-        config_parser__log_error(ctx, "expected an integer constant for version specifier: 'version(#)'");
-        config_parser__recover_parse(ctx);
+    if (!def_config_parser_recognize_base_kind(ctx, TokenBaseKind_LiteralInteger)){
+        def_config_parser_push_error_here(ctx, "expected an integer constant for version specifier: 'version(#)'");
+        def_config_parser_recover(ctx);
         return(0);
     }
     
-    Config_Integer value = config_parser__get_int(ctx);
-    config_parser__advance_to_next(ctx);
+    Config_Integer value = def_config_parser_get_int(ctx);
+    def_config_parser_inc(ctx);
     
-    if (!config_parser__match_token(ctx, TokenCppKind_ParenCl)){
-        config_parser__log_error(ctx, "expected token ')' for version specifier: 'version(#)'");
-        config_parser__recover_parse(ctx);
+    if (!def_config_parser_match_cpp_kind(ctx, TokenCppKind_ParenCl)){
+        def_config_parser_push_error_here(ctx, "expected token ')' for version specifier: 'version(#)'");
+        def_config_parser_recover(ctx);
         return(0);
     }
     
-    if (!config_parser__match_token(ctx, TokenCppKind_Semicolon)){
-        config_parser__log_error(ctx, "expected token ';' for version specifier: 'version(#)'");
-        config_parser__recover_parse(ctx);
+    if (!def_config_parser_match_cpp_kind(ctx, TokenCppKind_Semicolon)){
+        def_config_parser_push_error_here(ctx, "expected token ';' for version specifier: 'version(#)'");
+        def_config_parser_recover(ctx);
         return(0);
     }
     
@@ -349,37 +335,37 @@ config_parser__version(Config_Parser *ctx){
 }
 
 function Config_Assignment*
-config_parser__assignment(Config_Parser *ctx){
-    u8 *pos = config_parser__get_pos(ctx);
+def_config_parser_assignment(Config_Parser *ctx){
+    u8 *pos = def_config_parser_get_pos(ctx);
     
-    Config_LValue *l = config_parser__lvalue(ctx);
+    Config_LValue *l = def_config_parser_lvalue(ctx);
     if (l == 0){
-        config_parser__log_error(ctx, "expected an l-value; l-value formats: 'identifier', 'identifier[#]'");
-        config_parser__recover_parse(ctx);
+        def_config_parser_push_error_here(ctx, "expected an l-value; l-value formats: 'identifier', 'identifier[#]'");
+        def_config_parser_recover(ctx);
         return(0);
     }
     
-    if (!config_parser__match_token(ctx, TokenCppKind_Eq)){
-        config_parser__log_error(ctx, "expected token '=' for assignment: 'l-value = r-value;'");
-        config_parser__recover_parse(ctx);
+    if (!def_config_parser_match_cpp_kind(ctx, TokenCppKind_Eq)){
+        def_config_parser_push_error_here(ctx, "expected token '=' for assignment: 'l-value = r-value;'");
+        def_config_parser_recover(ctx);
         return(0);
     }
     
-    Config_RValue *r = config_parser__rvalue(ctx);
+    Config_RValue *r = def_config_parser_rvalue(ctx);
     if (r == 0){
-        config_parser__log_error(ctx, "expected an r-value; r-value formats:\n"
-                                 "\tconstants (true, false, integers, hexadecimal integers, strings, characters)\n"
-                                 "\tany l-value that is set in the file\n"
-                                 "\tcompound: '{ compound-element, compound-element, compound-element ...}'\n"
-                                 "\ta compound-element is an r-value, and can have a layout specifier\n"
-                                 "\tcompound-element with layout specifier: .name = r-value, .integer = r-value");
-        config_parser__recover_parse(ctx);
+        def_config_parser_push_error_here(ctx, "expected an r-value; r-value formats:\n"
+                                          "\tconstants (true, false, integers, hexadecimal integers, strings, characters)\n"
+                                          "\tany l-value that is set in the file\n"
+                                          "\tcompound: '{ compound-element, compound-element, compound-element ...}'\n"
+                                          "\ta compound-element is an r-value, and can have a layout specifier\n"
+                                          "\tcompound-element with layout specifier: .name = r-value, .integer = r-value");
+        def_config_parser_recover(ctx);
         return(0);
     }
     
-    if (!config_parser__match_token(ctx, TokenCppKind_Semicolon)){
-        config_parser__log_error(ctx, "expected token ';' for assignment: 'l-value = r-value;'");
-        config_parser__recover_parse(ctx);
+    if (!def_config_parser_match_cpp_kind(ctx, TokenCppKind_Semicolon)){
+        def_config_parser_push_error_here(ctx, "expected token ';' for assignment: 'l-value = r-value;'");
+        def_config_parser_recover(ctx);
         return(0);
     }
     
@@ -391,18 +377,18 @@ config_parser__assignment(Config_Parser *ctx){
 }
 
 function Config_LValue*
-config_parser__lvalue(Config_Parser *ctx){
-    require(config_parser__recognize_token(ctx, TokenCppKind_Identifier));
-    String_Const_u8 identifier = config_parser__get_lexeme(ctx);
-    config_parser__advance_to_next(ctx);
+def_config_parser_lvalue(Config_Parser *ctx){
+    require(def_config_parser_recognize_cpp_kind(ctx, TokenCppKind_Identifier));
+    String_Const_u8 identifier = def_config_parser_get_lexeme(ctx);
+    def_config_parser_inc(ctx);
     
     i32 index = 0;
-    if (config_parser__match_token(ctx, TokenCppKind_BrackOp)){
-        require(config_parser__recognize_base_token(ctx, TokenBaseKind_LiteralInteger));
-        Config_Integer value = config_parser__get_int(ctx);
+    if (def_config_parser_match_cpp_kind(ctx, TokenCppKind_BrackOp)){
+        require(def_config_parser_recognize_base_kind(ctx, TokenBaseKind_LiteralInteger));
+        Config_Integer value = def_config_parser_get_int(ctx);
         index = value.integer;
-        config_parser__advance_to_next(ctx);
-        require(config_parser__match_token(ctx, TokenCppKind_BrackCl));
+        def_config_parser_inc(ctx);
+        require(def_config_parser_match_cpp_kind(ctx, TokenCppKind_BrackCl));
     }
     
     Config_LValue *lvalue = push_array_zero(ctx->arena, Config_LValue, 1);
@@ -412,33 +398,33 @@ config_parser__lvalue(Config_Parser *ctx){
 }
 
 function Config_RValue*
-config_parser__rvalue(Config_Parser *ctx){
+def_config_parser_rvalue(Config_Parser *ctx){
     Config_RValue *rvalue = 0;
-    if (config_parser__recognize_token(ctx, TokenCppKind_Identifier)){
-        Config_LValue *l = config_parser__lvalue(ctx);
+    if (def_config_parser_recognize_cpp_kind(ctx, TokenCppKind_Identifier)){
+        Config_LValue *l = def_config_parser_lvalue(ctx);
         require(l != 0);
         rvalue = push_array_zero(ctx->arena, Config_RValue, 1);
         rvalue->type = ConfigRValueType_LValue;
         rvalue->lvalue = l;
     }
-    else if (config_parser__recognize_token(ctx, TokenCppKind_BraceOp)){
-        config_parser__advance_to_next(ctx);
-        Config_Compound *compound = config_parser__compound(ctx);
+    else if (def_config_parser_recognize_cpp_kind(ctx, TokenCppKind_BraceOp)){
+        def_config_parser_inc(ctx);
+        Config_Compound *compound = def_config_parser_compound(ctx);
         require(compound != 0);
         rvalue = push_array_zero(ctx->arena, Config_RValue, 1);
         rvalue->type = ConfigRValueType_Compound;
         rvalue->compound = compound;
     }
-    else if (config_parser__recognize_boolean(ctx)){
-        b32 b = config_parser__get_boolean(ctx);
-        config_parser__advance_to_next(ctx);
+    else if (def_config_parser_recognize_boolean(ctx)){
+        b32 b = def_config_parser_get_boolean(ctx);
+        def_config_parser_inc(ctx);
         rvalue = push_array_zero(ctx->arena, Config_RValue, 1);
         rvalue->type = ConfigRValueType_Boolean;
         rvalue->boolean = b;
     }
-    else if (config_parser__recognize_base_token(ctx, TokenBaseKind_LiteralInteger)){
-        Config_Integer value = config_parser__get_int(ctx);
-        config_parser__advance_to_next(ctx);
+    else if (def_config_parser_recognize_base_kind(ctx, TokenBaseKind_LiteralInteger)){
+        Config_Integer value = def_config_parser_get_int(ctx);
+        def_config_parser_inc(ctx);
         rvalue = push_array_zero(ctx->arena, Config_RValue, 1);
         rvalue->type = ConfigRValueType_Integer;
         if (value.is_signed){
@@ -448,23 +434,14 @@ config_parser__rvalue(Config_Parser *ctx){
             rvalue->uinteger = value.uinteger;
         }
     }
-    else if (config_parser__recognize_token(ctx, TokenCppKind_LiteralString)){
-        String_Const_u8 s = config_parser__get_lexeme(ctx);
-        config_parser__advance_to_next(ctx);
+    else if (def_config_parser_recognize_cpp_kind(ctx, TokenCppKind_LiteralString)){
+        String_Const_u8 s = def_config_parser_get_lexeme(ctx);
+        def_config_parser_inc(ctx);
         s = string_chop(string_skip(s, 1), 1);
         String_Const_u8 interpreted = string_interpret_escapes(ctx->arena, s);
         rvalue = push_array_zero(ctx->arena, Config_RValue, 1);
         rvalue->type = ConfigRValueType_String;
         rvalue->string = interpreted;
-    }
-    else if (config_parser__recognize_token(ctx, TokenCppKind_LiteralCharacter)){
-        String_Const_u8 s = config_parser__get_lexeme(ctx);
-        config_parser__advance_to_next(ctx);
-        s = string_chop(string_skip(s, 1), 1);
-        String_Const_u8 interpreted = string_interpret_escapes(ctx->arena, s);
-        rvalue = push_array_zero(ctx->arena, Config_RValue, 1);
-        rvalue->type = ConfigRValueType_Character;
-        rvalue->character = string_get_character(interpreted, 0);
     }
     return(rvalue);
 }
@@ -479,34 +456,34 @@ config_parser__compound__check(Config_Parser *ctx, Config_Compound *compound){
             implicit_index_allowed = false;
         }
         else if (!implicit_index_allowed){
-            config_parser__log_error_pos(ctx, node->l.pos,
+            def_config_parser_push_error(ctx, node->l.pos,
                                          "encountered unlabeled member after one or more labeled members");
         }
     }
 }
 
 function Config_Compound*
-config_parser__compound(Config_Parser *ctx){
+def_config_parser_compound(Config_Parser *ctx){
     Config_Compound_Element *first = 0;
     Config_Compound_Element *last = 0;
     i32 count = 0;
     
-    Config_Compound_Element *element = config_parser__element(ctx);
+    Config_Compound_Element *element = def_config_parser_element(ctx);
     require(element != 0);
     zdll_push_back(first, last, element);
     count += 1;
     
-    for (;config_parser__match_token(ctx, TokenCppKind_Comma);){
-        if (config_parser__recognize_token(ctx, TokenCppKind_BraceCl)){
+    for (;def_config_parser_match_cpp_kind(ctx, TokenCppKind_Comma);){
+        if (def_config_parser_recognize_cpp_kind(ctx, TokenCppKind_BraceCl)){
             break;
         }
-        element = config_parser__element(ctx);
+        element = def_config_parser_element(ctx);
         require(element != 0);
         zdll_push_back(first, last, element);
         count += 1;
     }
     
-    require(config_parser__match_token(ctx, TokenCppKind_BraceCl));
+    require(def_config_parser_match_cpp_kind(ctx, TokenCppKind_BraceCl));
     
     Config_Compound *compound = push_array(ctx->arena, Config_Compound, 1);
     block_zero_struct(compound);
@@ -518,27 +495,27 @@ config_parser__compound(Config_Parser *ctx){
 }
 
 function Config_Compound_Element*
-config_parser__element(Config_Parser *ctx){
+def_config_parser_element(Config_Parser *ctx){
     Config_Layout layout = {};
-    layout.pos = config_parser__get_pos(ctx);
-    if (config_parser__match_token(ctx, TokenCppKind_Dot)){
-        if (config_parser__recognize_token(ctx, TokenCppKind_Identifier)){
+    layout.pos = def_config_parser_get_pos(ctx);
+    if (def_config_parser_match_cpp_kind(ctx, TokenCppKind_Dot)){
+        if (def_config_parser_recognize_cpp_kind(ctx, TokenCppKind_Identifier)){
             layout.type = ConfigLayoutType_Identifier;
-            layout.identifier = config_parser__get_lexeme(ctx);
-            config_parser__advance_to_next(ctx);
+            layout.identifier = def_config_parser_get_lexeme(ctx);
+            def_config_parser_inc(ctx);
         }
-        else if (config_parser__recognize_base_token(ctx, TokenBaseKind_LiteralInteger)){
+        else if (def_config_parser_recognize_base_kind(ctx, TokenBaseKind_LiteralInteger)){
             layout.type = ConfigLayoutType_Integer;
-            Config_Integer value = config_parser__get_int(ctx);
+            Config_Integer value = def_config_parser_get_int(ctx);
             layout.integer = value.integer;
-            config_parser__advance_to_next(ctx);
+            def_config_parser_inc(ctx);
         }
         else{
             return(0);
         }
-        require(config_parser__match_token(ctx, TokenCppKind_Eq));
+        require(def_config_parser_match_cpp_kind(ctx, TokenCppKind_Eq));
     }
-    Config_RValue *rvalue = config_parser__rvalue(ctx);
+    Config_RValue *rvalue = def_config_parser_rvalue(ctx);
     require(rvalue != 0);
     Config_Compound_Element *element = push_array(ctx->arena, Config_Compound_Element, 1);
     block_zero_struct(element);
@@ -547,15 +524,340 @@ config_parser__element(Config_Parser *ctx){
     return(element);
 }
 
-////////////////////////////////
-
-function Config_Error*
-config_add_error(Arena *arena, Config *config, u8 *pos, char *error_text){
-    return(config_error_push(arena, &config->errors, config->file_name, pos,
-                             error_text));
+function Config*
+def_config_parse(Application_Links *app, Arena *arena, String_Const_u8 file_name, String_Const_u8 data, Token_Array array){
+    ProfileScope(app, "config parse");
+    Temp_Memory restore_point = begin_temp(arena);
+    Config_Parser ctx = def_config_parser_init(arena, file_name, data, array);
+    Config *config = def_config_parser_top(&ctx);
+    if (config == 0){
+        end_temp(restore_point);
+    }
+    return(config);
 }
 
+function Config*
+def_config_from_text(Application_Links *app, Arena *arena, String_Const_u8 file_name, String_Const_u8 data){
+    Config *parsed = 0;
+    Temp_Memory restore_point = begin_temp(arena);
+    Token_Array array = token_array_from_text(app, arena, data);
+    if (array.tokens != 0){
+        parsed = def_config_parse(app, arena, file_name, data, array);
+        if (parsed == 0){
+            end_temp(restore_point);
+        }
+    }
+    return(parsed);
+}
+
+function Config_Error*
+def_config_push_error(Arena *arena, Config_Error_List *list, String_Const_u8 file_name, u8 *pos, char *error_text){
+    Config_Error *error = push_array(arena, Config_Error, 1);
+    zdll_push_back(list->first, list->last, error);
+    list->count += 1;
+    error->file_name = file_name;
+    error->pos = pos;
+    error->text = push_string_copy(arena, SCu8(error_text));
+    return(error);
+}
+
+function Config_Error*
+def_config_push_error(Arena *arena, Config *config, u8 *pos, char *error_text){
+    return(def_config_push_error(arena, &config->errors, config->file_name, pos, error_text));
+}
+
+function void
+def_config_parser_push_error(Config_Parser *ctx, u8 *pos, char *error_text){
+    def_config_push_error(ctx->arena, &ctx->errors, ctx->file_name, pos, error_text);
+}
+
+function void
+def_config_parser_push_error_here(Config_Parser *ctx, char *error_text){
+    def_config_parser_push_error(ctx, def_config_parser_get_pos(ctx), error_text);
+}
+
+function void
+def_config_parser_recover(Config_Parser *ctx){
+    for (;;){
+        if (def_config_parser_match_cpp_kind(ctx, TokenCppKind_Semicolon)){
+            break;
+        }
+        if (def_config_parser_recognize_cpp_kind(ctx, TokenCppKind_EOF)){
+            break;
+        }
+        def_config_parser_inc(ctx);
+    }
+}
+
+
 ////////////////////////////////
+// NOTE(allen): Dump Config to Variables
+
+function Config_Get_Result
+config_var(Config *config, String_Const_u8 var_name, i32 subscript);
+
+function void
+def_var_dump_rvalue(Application_Links *app, Config *config, Variable_Handle dst, String_ID l_value, Config_RValue *r){
+    Scratch_Block scratch(app);
+    
+    b32 *boolean = 0;
+    i32 *integer = 0;
+    String_Const_u8 *string = 0;
+    Config_Compound *compound = 0;
+    
+    Config_Get_Result get_result = {};
+    
+    switch (r->type){
+        case ConfigRValueType_LValue:
+        {
+            Config_LValue *l = r->lvalue;
+            if (l != 0){
+                get_result = config_var(config, l->identifier, l->index);
+                if (get_result.success){
+                    switch (get_result.type){
+                        case ConfigRValueType_Boolean:
+                        {
+                            boolean = &get_result.boolean;
+                        }break;
+                        
+                        case ConfigRValueType_Integer:
+                        {
+                            integer = &get_result.integer;
+                        }break;
+                        
+                        case ConfigRValueType_String:
+                        {
+                            string = &get_result.string;
+                        }break;
+                        
+                        case ConfigRValueType_Compound:
+                        {
+                            compound = get_result.compound;
+                        }break;
+                    }
+                }
+            }
+        }break;
+        
+        case ConfigRValueType_Boolean:
+        {
+            boolean = &r->boolean;
+        }break;
+        
+        case ConfigRValueType_Integer:
+        {
+            integer = &r->integer;
+        }break;
+        
+        case ConfigRValueType_String:
+        {
+            string = &r->string;
+        }break;
+        
+        case ConfigRValueType_Compound:
+        {
+            compound = r->compound;
+        }break;
+    }
+    
+    if (boolean != 0){
+        String_ID val = 0;
+        if (*boolean){
+            val = vars_save_string(str8_lit("true"));
+        }
+        else{
+            val = vars_save_string(str8_lit("false"));
+        }
+        vars_new_variable(dst, l_value, val);
+    }
+    else if (integer != 0){
+        // TODO(allen): signed/unsigned problem
+        String_ID val = vars_save_string(push_stringf(scratch, "%d", *integer));
+        vars_new_variable(dst, l_value, val);
+    }
+    else if (string != 0){
+        String_ID val = vars_save_string(*string);
+        vars_new_variable(dst, l_value, val);
+    }
+    else if (compound != 0){
+        Variable_Handle sub_var = vars_new_variable(dst, l_value);
+        
+        i32 implicit_index = 0;
+        b32 implicit_allowed = true;
+        
+        Config_Compound_Element *node = 0;
+        if (compound != 0){
+            node = compound->first;
+        }
+        for (; node != 0;
+             node = node->next, implicit_index += 1){
+            String_ID sub_l_value = 0;
+            
+            switch (node->l.type){
+                case ConfigLayoutType_Unset:
+                {
+                    if (implicit_allowed){
+                        sub_l_value = vars_save_string(push_stringf(scratch, "%d", implicit_index));
+                    }
+                }break;
+                
+                case ConfigLayoutType_Identifier:
+                {
+                    implicit_allowed = false;
+                    sub_l_value = vars_save_string(node->l.identifier);
+                }break;
+                
+                case ConfigLayoutType_Integer:
+                {
+                    implicit_allowed = false;
+                    sub_l_value = vars_save_string(push_stringf(scratch, "%d", node->l.integer));
+                }break;
+            }
+            
+            if (sub_l_value != 0){
+                Config_RValue *r = node->r;
+                if (r != 0){
+                    def_var_dump_rvalue(app, config, sub_var, sub_l_value, r);
+                }
+            }
+        }
+    }
+}
+
+function Variable_Handle
+def_fill_var_from_config(Application_Links *app, Variable_Handle parent, String_ID key, Config *config){
+    Variable_Handle result = vars_get_nil();
+    
+    if (key != 0){
+        String_ID file_name_id = vars_save_string(config->file_name);
+        result = vars_new_variable(parent, key, file_name_id);
+        
+        Variable_Handle var = result;
+        
+        Scratch_Block scratch(app);
+        
+        if (config->version != 0){
+            String_ID version_key = vars_save_string(string_u8_litexpr("version"));
+            String_ID version_value = vars_save_string(push_stringf(scratch, "%d", *config->version));
+            vars_new_variable(parent, version_key, version_value);
+        }
+        
+        for (Config_Assignment *node = config->first;
+             node != 0;
+             node = node->next){
+            String_ID l_value = 0;
+            Config_LValue *l = node->l;
+            if (l != 0){
+                String_Const_u8 string = l->identifier;
+                if (l->index != 0){
+                    string = push_stringf(scratch, "%.*s.%d", string_expand(string), l->index);
+                }
+                l_value = vars_save_string(string);
+            }
+            
+            if (l_value != 0){
+                Config_RValue *r = node->r;
+                if (r != 0){
+                    def_var_dump_rvalue(app, config, var, l_value, r);
+                }
+            }
+        }
+    }
+    
+    return(result);
+}
+
+
+////////////////////////////////
+// NOTE(allen): Config Variables Read
+
+global const u64 def_config_lookup_count = 4;
+global String_ID def_config_lookup_table[def_config_lookup_count] = {};
+
+function void
+_def_config_table_init(void){
+    if (def_config_lookup_table[0] == 0){
+        def_config_lookup_table[0] = vars_save_string(str8_lit("ses_config"));
+        def_config_lookup_table[1] = vars_save_string(str8_lit("prj_config"));
+        def_config_lookup_table[2] = vars_save_string(str8_lit("usr_config"));
+        def_config_lookup_table[3] = vars_save_string(str8_lit("def_config"));
+    }
+}
+
+function Variable_Handle
+def_get_config_var(String_ID key){
+    _def_config_table_init();
+    
+    Variable_Handle result = vars_get_nil();
+    Variable_Handle root = vars_get_root();
+    for (u64 i = 0; i < def_config_lookup_count; i += 1){
+        String_ID block_key = def_config_lookup_table[i];
+        Variable_Handle block_var = vars_read_key(root, block_key);
+        Variable_Handle var = vars_read_key(block_var, key);
+        if (!vars_is_nil(var)){
+            result = var;
+            break;
+        }
+    }
+    
+    return(result);
+}
+
+function void
+def_set_config_var(String_ID key, String_ID val){
+    _def_config_table_init();
+    Variable_Handle root = vars_get_root();
+    Variable_Handle block_var = vars_read_key(root, def_config_lookup_table[0]);
+	if (vars_is_nil(block_var)){
+		block_var = vars_new_variable(root, def_config_lookup_table[0]);
+	}
+    vars_new_variable(block_var, key, val);
+}
+
+function b32
+def_get_config_b32(String_ID key){
+    Variable_Handle var = def_get_config_var(key);
+    String_ID val = vars_string_id_from_var(var);
+    b32 result = (val != 0 && val != vars_save_string_lit("false"));
+    return(result);
+}
+
+function void
+def_set_config_b32(String_ID key, b32 val){
+    String_ID val_id = val?vars_save_string_lit("true"):vars_save_string_lit("false");
+    def_set_config_var(key, val_id);
+}
+
+function String_Const_u8
+def_get_config_string(Arena *arena, String_ID key){
+    Variable_Handle var = def_get_config_var(key);
+    String_Const_u8 result = vars_string_from_var(arena, var);
+    return(result);
+}
+
+function void
+def_set_config_string(String_ID key, String_Const_u8 val){
+    def_set_config_var(key, vars_save_string(val));
+}
+
+function u64
+def_get_config_u64(Application_Links *app, String_ID key){
+    Scratch_Block scratch(app);
+    Variable_Handle var = def_get_config_var(key);
+    u64 result = vars_u64_from_var(app, var);
+    return(result);
+}
+
+function void
+def_set_config_u64(Application_Links *app, String_ID key, u64 val){
+    Scratch_Block scratch(app);
+    String_Const_u8 val_string = push_stringf(scratch, "%llu", val);
+    def_set_config_var(key, vars_save_string(val_string));
+}
+
+
+////////////////////////////////
+// NOTE(allen): Eval
 
 function Config_Assignment*
 config_lookup_assignment(Config *config, String_Const_u8 var_name, i32 subscript){
@@ -570,9 +872,6 @@ config_lookup_assignment(Config *config, String_Const_u8 var_name, i32 subscript
     }
     return(assignment);
 }
-
-function Config_Get_Result
-config_var(Config *config, String_Const_u8 var_name, i32 subscript);
 
 function Config_Get_Result
 config_evaluate_rvalue(Config *config, Config_Assignment *assignment, Config_RValue *r){
@@ -604,11 +903,6 @@ config_evaluate_rvalue(Config *config, Config_Assignment *assignment, Config_RVa
                     result.string = r->string;
                 }break;
                 
-                case ConfigRValueType_Character:
-                {
-                    result.character = r->character;
-                }break;
-                
                 case ConfigRValueType_Compound:
                 {
                     result.compound = r->compound;
@@ -628,6 +922,10 @@ config_var(Config *config, String_Const_u8 var_name, i32 subscript){
     }
     return(result);
 }
+
+
+////////////////////////////////
+// NOTE(allen): Nonsense from the old system
 
 function Config_Get_Result
 config_compound_member(Config *config, Config_Compound *compound, String_Const_u8 var_name, i32 index){
@@ -684,17 +982,6 @@ typed_array_reference_list(Arena *arena, Config *parsed, Config_Compound *compou
 #define config_fixed_string_var(c,v,s,o,a) config_placed_string_var((c),(v),(s),(o),(a),sizeof(a))
 
 ////////////////////////////////
-
-function b32
-config_has_var(Config *config, String_Const_u8 var_name, i32 subscript){
-    Config_Get_Result result = config_var(config, var_name, subscript);
-    return(result.success && result.type == ConfigRValueType_NoType);
-}
-
-function b32
-config_has_var(Config *config, char *var_name, i32 subscript){
-    return(config_has_var(config, SCu8(var_name), subscript));
-}
 
 function b32
 config_bool_var(Config *config, String_Const_u8 var_name, i32 subscript, b32* var_out){
@@ -792,21 +1079,6 @@ config_placed_string_var(Config *config, char *var_name, i32 subscript, String_C
 }
 
 function b32
-config_char_var(Config *config, String_Const_u8 var_name, i32 subscript, char* var_out){
-    Config_Get_Result result = config_var(config, var_name, subscript);
-    b32 success = result.success && result.type == ConfigRValueType_Character;
-    if (success){
-        *var_out = result.character;
-    }
-    return(success);
-}
-
-function b32
-config_char_var(Config *config, char *var_name, i32 subscript, char* var_out){
-    return(config_char_var(config, SCu8(var_name), subscript, var_out));
-}
-
-function b32
 config_compound_var(Config *config, String_Const_u8 var_name, i32 subscript, Config_Compound** var_out){
     Config_Get_Result result = config_var(config, var_name, subscript);
     b32 success = (result.success && result.type == ConfigRValueType_Compound);
@@ -819,20 +1091,6 @@ config_compound_var(Config *config, String_Const_u8 var_name, i32 subscript, Con
 function b32
 config_compound_var(Config *config, char *var_name, i32 subscript, Config_Compound** var_out){
     return(config_compound_var(config, SCu8(var_name), subscript, var_out));
-}
-
-function b32
-config_compound_has_member(Config *config, Config_Compound *compound,
-                           String_Const_u8 var_name, i32 index){
-    Config_Get_Result result = config_compound_member(config, compound, var_name, index);
-    b32 success = result.success && result.type == ConfigRValueType_NoType;
-    return(success);
-}
-
-function b32
-config_compound_has_member(Config *config, Config_Compound *compound,
-                           char *var_name, i32 index){
-    return(config_compound_has_member(config, compound, SCu8(var_name), index));
 }
 
 function b32
@@ -924,23 +1182,6 @@ config_compound_placed_string_member(Config *config, Config_Compound *compound,
 }
 
 function b32
-config_compound_char_member(Config *config, Config_Compound *compound,
-                            String_Const_u8 var_name, i32 index, char* var_out){
-    Config_Get_Result result = config_compound_member(config, compound, var_name, index);
-    b32 success = result.success && result.type == ConfigRValueType_Character;
-    if (success){
-        *var_out = result.character;
-    }
-    return(success);
-}
-
-function b32
-config_compound_char_member(Config *config, Config_Compound *compound,
-                            char *var_name, i32 index, char* var_out){
-    return(config_compound_char_member(config, compound, SCu8(var_name), index, var_out));
-}
-
-function b32
 config_compound_compound_member(Config *config, Config_Compound *compound,
                                 String_Const_u8 var_name, i32 index, Config_Compound** var_out){
     Config_Get_Result result = config_compound_member(config, compound, var_name, index);
@@ -955,12 +1196,6 @@ function b32
 config_compound_compound_member(Config *config, Config_Compound *compound,
                                 char *var_name, i32 index, Config_Compound** var_out){
     return(config_compound_compound_member(config, compound, SCu8(var_name), index, var_out));
-}
-
-function Iteration_Step_Result
-typed_has_array_iteration_step(Config *config, Config_Compound *compound, i32 index){
-    Config_Iteration_Step_Result result = typed_array_iteration_step(config, compound, ConfigRValueType_NoType, index);
-    return(result.step);
 }
 
 function Iteration_Step_Result
@@ -1017,16 +1252,6 @@ typed_placed_string_array_iteration_step(Config *config, Config_Compound *compou
 }
 
 function Iteration_Step_Result
-typed_char_array_iteration_step(Config *config, Config_Compound *compound, i32 index, char* var_out){
-    Config_Iteration_Step_Result result = typed_array_iteration_step(config, compound, ConfigRValueType_Character, index);
-    b32 success = (result.step == Iteration_Good);
-    if (success){
-        *var_out = result.get.character;
-    }
-    return(result.step);
-}
-
-function Iteration_Step_Result
 typed_compound_array_iteration_step(Config *config, Config_Compound *compound, i32 index, Config_Compound** var_out){
     Config_Iteration_Step_Result result = typed_array_iteration_step(config, compound, ConfigRValueType_Compound, index);
     b32 success = (result.step == Iteration_Good);
@@ -1049,32 +1274,14 @@ typed_int_array_get_count(Config *config, Config_Compound *compound){
 }
 
 function i32
-typed_float_array_get_count(Config *config, Config_Compound *compound){
-    i32 count = typed_array_get_count(config, compound, ConfigRValueType_Float);
-    return(count);
-}
-
-function i32
 typed_string_array_get_count(Config *config, Config_Compound *compound){
     i32 count = typed_array_get_count(config, compound, ConfigRValueType_String);
     return(count);
 }
 
 function i32
-typed_character_array_get_count(Config *config, Config_Compound *compound){
-    i32 count = typed_array_get_count(config, compound, ConfigRValueType_Character);
-    return(count);
-}
-
-function i32
 typed_compound_array_get_count(Config *config, Config_Compound *compound){
     i32 count = typed_array_get_count(config, compound, ConfigRValueType_Compound);
-    return(count);
-}
-
-function i32
-typed_no_type_array_get_count(Config *config, Config_Compound *compound){
-    i32 count = typed_array_get_count(config, compound, ConfigRValueType_NoType);
     return(count);
 }
 
@@ -1091,32 +1298,14 @@ typed_int_array_reference_list(Arena *arena, Config *config, Config_Compound *co
 }
 
 function Config_Get_Result_List
-typed_float_array_reference_list(Arena *arena, Config *config, Config_Compound *compound){
-    Config_Get_Result_List list = typed_array_reference_list(arena, config, compound, ConfigRValueType_Float);
-    return(list);
-}
-
-function Config_Get_Result_List
 typed_string_array_reference_list(Arena *arena, Config *config, Config_Compound *compound){
     Config_Get_Result_List list = typed_array_reference_list(arena, config, compound, ConfigRValueType_String);
     return(list);
 }
 
 function Config_Get_Result_List
-typed_character_array_reference_list(Arena *arena, Config *config, Config_Compound *compound){
-    Config_Get_Result_List list = typed_array_reference_list(arena, config, compound, ConfigRValueType_Character);
-    return(list);
-}
-
-function Config_Get_Result_List
 typed_compound_array_reference_list(Arena *arena, Config *config, Config_Compound *compound){
     Config_Get_Result_List list = typed_array_reference_list(arena, config, compound, ConfigRValueType_Compound);
-    return(list);
-}
-
-function Config_Get_Result_List
-typed_no_type_array_reference_list(Arena *arena, Config *config, Config_Compound *compound){
-    Config_Get_Result_List list = typed_array_reference_list(arena, config, compound, ConfigRValueType_NoType);
     return(list);
 }
 
@@ -1128,7 +1317,7 @@ typed_array_iteration_step(Config *parsed, Config_Compound *compound, Config_RVa
     result.step = Iteration_Quit;
     Config_Get_Result get_result = config_compound_member(parsed, compound, string_u8_litexpr("~"), index);
     if (get_result.success){
-        if (get_result.type == type || type == ConfigRValueType_NoType){
+        if (get_result.type == type){
             result.step = Iteration_Good;
             result.get = get_result;
         }
@@ -1192,218 +1381,11 @@ change_mode(Application_Links *app, String_Const_u8 mode){
 
 ////////////////////////////////
 
-function Token_Array
-token_array_from_text(Application_Links *app, Arena *arena, String_Const_u8 data){
-    ProfileScope(app, "token array from text");
-    Token_List list = lex_full_input_cpp(arena, data);
-    return(token_array_from_list(arena, &list));
-}
-
-function Config*
-config_from_text(Application_Links *app, Arena *arena, String_Const_u8 file_name,
-                 String_Const_u8 data){
-    Config *parsed = 0;
-    Temp_Memory restore_point = begin_temp(arena);
-    Token_Array array = token_array_from_text(app, arena, data);
-    if (array.tokens != 0){
-        parsed = config_parse(app, arena, file_name, data, array);
-        if (parsed == 0){
-            end_temp(restore_point);
-        }
-    }
-    return(parsed);
-}
-
-////////////////////////////////
-
-function void
-config_init_default(Config_Data *config){
-    config->user_name = SCu8(config->user_name_space, (u64)0);
-    
-    block_zero_struct(&config->code_exts);
-    
-    config->mapping = SCu8(config->mapping_space, (u64)0);
-    config->mode = SCu8(config->mode_space, (u64)0);
-    
-    config->bind_by_physical_key = false;
-    config->use_scroll_bars = false;
-    config->use_file_bars = true;
-    config->hide_file_bar_in_ui = true;
-    config->use_error_highlight = true;
-    config->use_jump_highlight = true;
-    config->use_scope_highlight = true;
-    config->use_paren_helper = true;
-    config->use_comment_keyword = true;
-    config->lister_whole_word_backspace_when_modified = false;
-    config->show_line_number_margins = false;
-    config->enable_output_wrapping = false;
-    config->enable_undo_fade_out = true;
-    
-    config->enable_virtual_whitespace = true;
-    config->enable_code_wrapping = true;
-    config->automatically_indent_text_on_save = true;
-    config->automatically_save_changes_on_build = true;
-    config->automatically_load_project = false;
-    
-    config->cursor_roundness = .45f;
-    config->mark_thickness = 2.f;
-    config->lister_roundness = .20f;
-    
-    config->virtual_whitespace_regular_indent = 4;
-    
-    config->indent_with_tabs = false;
-    config->indent_width = 4;
-    config->default_tab_width = 4;
-    
-    config->default_theme_name = SCu8(config->default_theme_name_space, sizeof("4coder") - 1);
-    block_copy(config->default_theme_name.str, "4coder", config->default_theme_name.size);
-    config->highlight_line_at_cursor = true;
-    
-    config->default_font_name = SCu8(config->default_font_name_space, (u64)0);
-    config->default_font_size = 16;
-    config->default_font_hinting = false;
-    
-    config->default_compiler_bat = SCu8(config->default_compiler_bat_space, 2);
-    block_copy(config->default_compiler_bat.str, "cl", 2);
-    
-    config->default_flags_bat = SCu8(config->default_flags_bat_space, (u64)0);
-    
-    config->default_compiler_sh = SCu8(config->default_compiler_sh_space, 3);
-    block_copy(config->default_compiler_sh.str, "g++", 3);
-    
-    config->default_flags_sh = SCu8(config->default_flags_sh_space, (u64)0);
-    
-    config->lalt_lctrl_is_altgr = false;
-}
-
-function Config*
-config_parse__data(Application_Links *app, Arena *arena, String_Const_u8 file_name,
-                   String_Const_u8 data, Config_Data *config){
-    config_init_default(config);
-    
-    b32 success = false;
-    
-    Config *parsed = config_from_text(app, arena, file_name, data);
-    if (parsed != 0){
-        success = true;
-        
-        config_fixed_string_var(parsed, "user_name", 0,
-                                &config->user_name, config->user_name_space);
-        
-        String_Const_u8 str = {};
-        if (config_string_var(parsed, "treat_as_code", 0, &str)){
-            config->code_exts =
-                parse_extension_line_to_extension_list(app, arena, str);
-        }
-        
-        config_fixed_string_var(parsed, "mapping", 0, &config->mapping, config->mapping_space);
-        config_fixed_string_var(parsed, "mode", 0, &config->mode, config->mode_space);
-        
-        config_bool_var(parsed, "bind_by_physical_key", 0, &config->bind_by_physical_key);
-        config_bool_var(parsed, "use_scroll_bars", 0, &config->use_scroll_bars);
-        config_bool_var(parsed, "use_file_bars", 0, &config->use_file_bars);
-        config_bool_var(parsed, "hide_file_bar_in_ui", 0, &config->hide_file_bar_in_ui);
-        config_bool_var(parsed, "use_error_highlight", 0, &config->use_error_highlight);
-        config_bool_var(parsed, "use_jump_highlight", 0, &config->use_jump_highlight);
-        config_bool_var(parsed, "use_scope_highlight", 0, &config->use_scope_highlight);
-        config_bool_var(parsed, "use_paren_helper", 0, &config->use_paren_helper);
-        config_bool_var(parsed, "use_comment_keyword", 0, &config->use_comment_keyword);
-        config_bool_var(parsed, "lister_whole_word_backspace_when_modified", 0, &config->lister_whole_word_backspace_when_modified);
-        config_bool_var(parsed, "show_line_number_margins", 0, &config->show_line_number_margins);
-        config_bool_var(parsed, "enable_output_wrapping", 0, &config->enable_output_wrapping);
-        config_bool_var(parsed, "enable_undo_fade_out", 0, &config->enable_undo_fade_out);
-        
-        
-        config_bool_var(parsed, "enable_virtual_whitespace", 0, &config->enable_virtual_whitespace);
-        config_bool_var(parsed, "enable_code_wrapping", 0, &config->enable_code_wrapping);
-        config_bool_var(parsed, "automatically_indent_text_on_save", 0, &config->automatically_indent_text_on_save);
-        config_bool_var(parsed, "automatically_save_changes_on_build", 0, &config->automatically_save_changes_on_build);
-        config_bool_var(parsed, "automatically_load_project", 0, &config->automatically_load_project);
-        
-        {
-            i32 x = 0;
-            if (config_int_var(parsed, "cursor_roundness", 0, &x)){
-                config->cursor_roundness = ((f32)x)*0.01f;
-            }
-            if (config_int_var(parsed, "mark_thickness", 0, &x)){
-                config->mark_thickness = (f32)x;
-            }
-            if (config_int_var(parsed, "lister_roundness", 0, &x)){
-                config->lister_roundness = ((f32)x)*0.01f;
-            }
-        }
-        
-        config_int_var(parsed, "virtual_whitespace_regular_indent", 0, &config->virtual_whitespace_regular_indent);
-        
-        config_bool_var(parsed, "indent_with_tabs", 0, &config->indent_with_tabs);
-        config_int_var(parsed, "indent_width", 0, &config->indent_width);
-        config_int_var(parsed, "default_tab_width", 0, &config->default_tab_width);
-        
-        config_fixed_string_var(parsed, "default_theme_name", 0,
-                                &config->default_theme_name, config->default_theme_name_space);
-        config_bool_var(parsed, "highlight_line_at_cursor", 0, &config->highlight_line_at_cursor);
-        
-        config_fixed_string_var(parsed, "default_font_name", 0,
-                                &config->default_font_name, config->default_font_name_space);
-        config_int_var(parsed, "default_font_size", 0, &config->default_font_size);
-        config_bool_var(parsed, "default_font_hinting", 0, &config->default_font_hinting);
-        
-        config_fixed_string_var(parsed, "default_compiler_bat", 0,
-                                &config->default_compiler_bat, config->default_compiler_bat_space);
-        config_fixed_string_var(parsed, "default_flags_bat", 0,
-                                &config->default_flags_bat, config->default_flags_bat_space);
-        config_fixed_string_var(parsed, "default_compiler_sh", 0,
-                                &config->default_compiler_sh, config->default_compiler_sh_space);
-        config_fixed_string_var(parsed, "default_flags_sh", 0,
-                                &config->default_flags_sh, config->default_flags_sh_space);
-        
-        config_bool_var(parsed, "lalt_lctrl_is_altgr", 0, &config->lalt_lctrl_is_altgr);
-    }
-    
-    if (!success){
-        config_init_default(config);
-    }
-    
-    return(parsed);
-}
-
-function Config*
-config_parse__file_handle(Application_Links *app, Arena *arena,
-                          String_Const_u8 file_name, FILE *file, Config_Data *config){
-    Config *parsed = 0;
-    Data data = dump_file_handle(arena, file);
-    if (data.data != 0){
-        parsed = config_parse__data(app, arena, file_name, SCu8(data), config);
-    }
-    else{
-        config_init_default(config);
-    }
-    return(parsed);
-}
-
-function Config*
-config_parse__file_name(Application_Links *app, Arena *arena, char *file_name, Config_Data *config){
-    Config *parsed = 0;
-    b32 success = false;
-    FILE *file = open_file_try_current_path_then_binary_path(app, file_name);
-    if (file != 0){
-        Data data = dump_file_handle(arena, file);
-        fclose(file);
-        if (data.data != 0){
-            parsed = config_parse__data(app, arena, SCu8(file_name), SCu8(data),
-                                        config);
-            success = true;
-        }
-    }
-    if (!success){
-        config_init_default(config);
-    }
-    return(parsed);
-}
+// TODO(allen): cleanup this mess some more
 
 function Config*
 theme_parse__data(Application_Links *app, Arena *arena, String_Const_u8 file_name, String_Const_u8 data, Arena *color_arena, Color_Table *color_table){
-    Config *parsed = config_from_text(app, arena, file_name, data);
+    Config *parsed = def_config_from_text(app, arena, file_name, data);
     if (parsed != 0){
         for (Config_Assignment *node = parsed->first;
              node != 0;
@@ -1460,23 +1442,16 @@ theme_parse__buffer(Application_Links *app, Arena *arena, Buffer_ID buffer, Aren
 }
 
 function Config*
-theme_parse__file_handle(Application_Links *app, Arena *arena, String_Const_u8 file_name, FILE *file, Arena *color_arena, Color_Table *color_table){
-    Data data = dump_file_handle(arena, file);
-    Config *parsed = 0;
-    if (data.data != 0){
-        parsed = theme_parse__data(app, arena, file_name, SCu8(data), color_arena, color_table);
-    }
-    return(parsed);
-}
-
-function Config*
 theme_parse__file_name(Application_Links *app, Arena *arena, char *file_name, Arena *color_arena, Color_Table *color_table){
     Config *parsed = 0;
-    FILE *file = open_file_try_current_path_then_binary_path(app, file_name);
+	FILE* file = fopen(file_name, "rb");
+    if (file == 0){
+        file = def_search_normal_fopen(arena, file_name, "rb");
+    }
     if (file != 0){
-        Data data = dump_file_handle(arena, file);
+        String_Const_u8 data = dump_file_handle(arena, file);
         fclose(file);
-        parsed = theme_parse__data(app, arena, SCu8(file_name), SCu8(data), color_arena, color_table);
+        parsed = theme_parse__data(app, arena, SCu8(file_name), data, color_arena, color_table);
     }
     if (parsed == 0){
         Scratch_Block scratch(app, arena);
@@ -1488,141 +1463,67 @@ theme_parse__file_name(Application_Links *app, Arena *arena, char *file_name, Ar
 
 ////////////////////////////////
 
+// TODO(allen): review this function
 function void
-config_feedback_bool(Arena *arena, List_String_Const_u8 *list, char *name, b32 val){
-    string_list_pushf(arena, list, "%s = %s;\n", name, (char*)(val?"true":"false"));
-}
-
-function void
-config_feedback_string(Arena *arena, List_String_Const_u8 *list, char *name, String_Const_u8 val){
-    val.size = clamp_bot(0, val.size);
-    string_list_pushf(arena, list, "%s = \"%.*s\";\n", name, string_expand(val));
-}
-
-function void
-config_feedback_string(Arena *arena, List_String_Const_u8 *list, char *name, char *val){
-    string_list_pushf(arena, list, "%s = \"%s\";\n", name, val);
-}
-
-function void
-config_feedback_extension_list(Arena *arena, List_String_Const_u8 *list, char *name, String_Const_u8_Array *extensions){
-    string_list_pushf(arena, list, "%s = \"", name);
-    for (i32 i = 0; i < extensions->count; ++i){
-        String_Const_u8 ext = extensions->strings[i];
-        string_list_pushf(arena, list, ".%.*s", string_expand(ext));
-    }
-    string_list_push_u8_lit(arena, list, "\";\n");
-}
-
-function void
-config_feedback_int(Arena *arena, List_String_Const_u8 *list, char *name, i32 val){
-    string_list_pushf(arena, list, "%s = %d;\n", name, val);
-}
-
-////////////////////////////////
-
-function void
-load_config_and_apply(Application_Links *app, Arena *out_arena, Config_Data *config,
-                      i32 override_font_size, b32 override_hinting){
+load_config_and_apply(Application_Links *app, Arena *out_arena, i32 override_font_size, b32 override_hinting){
     Scratch_Block scratch(app, out_arena);
     
     linalloc_clear(out_arena);
-    Config *parsed = config_parse__file_name(app, out_arena, "config.4coder", config);
+    
+    Config *parsed = 0;
+    FILE *file = def_search_normal_fopen(scratch, "config.4coder", "rb");
+    if (file != 0){
+        String_Const_u8 data = dump_file_handle(scratch, file);
+        fclose(file);
+        if (data.str != 0){
+            parsed = def_config_from_text(app, scratch, str8_lit("config.4coder"), data);
+        }
+    } 
     
     if (parsed != 0){
-        // Top
-        print_message(app, string_u8_litexpr("Loaded config file:\n"));
-        
         // Errors
         String_Const_u8 error_text = config_stringize_errors(app, scratch, parsed);
         if (error_text.str != 0){
+            print_message(app, string_u8_litexpr("trying to load config file:\n"));
             print_message(app, error_text);
+        }
+        
+        // NOTE(allen): Save As Variables
+        if (error_text.str == 0){
+            // TODO(allen): this always applies to "def_config" need to get "usr_config" working too
+            Variable_Handle config_var = def_fill_var_from_config(app, vars_get_root(),
+                                                                  vars_save_string_lit("def_config"),
+                                                                  parsed);
+			vars_print(app, config_var);
+            print_message(app, string_u8_litexpr("\n"));
         }
     }
     else{
         print_message(app, string_u8_litexpr("Using default config:\n"));
         Face_Description description = get_face_description(app, 0);
         if (description.font.file_name.str != 0){
-            u64 size = Min(description.font.file_name.size, sizeof(config->default_font_name_space));
-            block_copy(config->default_font_name_space, description.font.file_name.str, size);
-            config->default_font_name.size = size;
+            def_set_config_string(vars_save_string_lit("default_font_name"), description.font.file_name);
         }
     }
     
-    if (config->default_font_name.size == 0){
-#define M "liberation-mono.ttf"
-        block_copy(config->default_font_name_space, M, sizeof(M) - 1);
-        config->default_font_name.size = sizeof(M) - 1;
-#undef M
+    String_Const_u8 default_font_name = def_get_config_string(scratch, vars_save_string_lit("default_font_name"));
+    if (default_font_name.size == 0){
+        default_font_name = string_u8_litexpr("liberation-mono.ttf");
     }
     
-    {
-        // Values
-        Temp_Memory temp2 = begin_temp(scratch);
-        List_String_Const_u8 list = {};
-        
-        config_feedback_string(scratch, &list, "user_name", config->user_name);
-        config_feedback_extension_list(scratch, &list, "treat_as_code", &config->code_exts);
-        
-        config_feedback_string(scratch, &list, "mapping", config->mapping);
-        config_feedback_string(scratch, &list, "mode", config->mode);
-        
-        config_feedback_bool(scratch, &list, "bind_by_physical_key", config->bind_by_physical_key);
-        config_feedback_bool(scratch, &list, "use_scroll_bars", config->use_scroll_bars);
-        config_feedback_bool(scratch, &list, "use_file_bars", config->use_file_bars);
-        config_feedback_bool(scratch, &list, "hide_file_bar_in_ui", config->hide_file_bar_in_ui);
-        config_feedback_bool(scratch, &list, "use_error_highlight", config->use_error_highlight);
-        config_feedback_bool(scratch, &list, "use_jump_highlight", config->use_jump_highlight);
-        config_feedback_bool(scratch, &list, "use_scope_highlight", config->use_scope_highlight);
-        config_feedback_bool(scratch, &list, "use_paren_helper", config->use_paren_helper);
-        config_feedback_bool(scratch, &list, "use_comment_keyword", config->use_comment_keyword);
-        config_feedback_bool(scratch, &list, "lister_whole_word_backspace_when_modified", config->lister_whole_word_backspace_when_modified);
-        config_feedback_bool(scratch, &list, "show_line_number_margins", config->show_line_number_margins);
-        config_feedback_bool(scratch, &list, "enable_output_wrapping", config->enable_output_wrapping);
-        config_feedback_bool(scratch, &list, "enable_undo_fade_out", config->enable_undo_fade_out);
-        
-        config_feedback_int(scratch, &list, "cursor_roundness", (i32)(config->cursor_roundness*100.f));
-        config_feedback_int(scratch, &list, "mark_thickness", (i32)(config->mark_thickness));
-        config_feedback_int(scratch, &list, "lister_roundness", (i32)(config->lister_roundness*100.f));
-        
-        config_feedback_bool(scratch, &list, "enable_virtual_whitespace", config->enable_virtual_whitespace);
-        config_feedback_int(scratch, &list, "virtual_whitespace_regular_indent", config->virtual_whitespace_regular_indent);
-        config_feedback_bool(scratch, &list, "enable_code_wrapping", config->enable_code_wrapping);
-        config_feedback_bool(scratch, &list, "automatically_indent_text_on_save", config->automatically_indent_text_on_save);
-        config_feedback_bool(scratch, &list, "automatically_save_changes_on_build", config->automatically_save_changes_on_build);
-        config_feedback_bool(scratch, &list, "automatically_load_project", config->automatically_load_project);
-        
-        config_feedback_bool(scratch, &list, "indent_with_tabs", config->indent_with_tabs);
-        config_feedback_int(scratch, &list, "indent_width", config->indent_width);
-        config_feedback_int(scratch, &list, "default_tab_width", config->default_tab_width);
-        
-        config_feedback_string(scratch, &list, "default_theme_name", config->default_theme_name);
-        config_feedback_bool(scratch, &list, "highlight_line_at_cursor", config->highlight_line_at_cursor);
-        config_feedback_bool(scratch, &list, "highlight_range", config->highlight_range);
-
-        config_feedback_string(scratch, &list, "default_font_name", config->default_font_name);
-        config_feedback_int(scratch, &list, "default_font_size", config->default_font_size);
-        config_feedback_bool(scratch, &list, "default_font_hinting", config->default_font_hinting);
-        
-        config_feedback_string(scratch, &list, "default_compiler_bat", config->default_compiler_bat);
-        config_feedback_string(scratch, &list, "default_flags_bat", config->default_flags_bat);
-        config_feedback_string(scratch, &list, "default_compiler_sh", config->default_compiler_sh);
-        config_feedback_string(scratch, &list, "default_flags_sh", config->default_flags_sh);
-        
-        config_feedback_bool(scratch, &list, "lalt_lctrl_is_altgr", config->lalt_lctrl_is_altgr);
-        
-        string_list_push_u8_lit(scratch, &list, "\n");
-        String_Const_u8 message = string_list_flatten(scratch, list);
-        print_message(app, message);
-        end_temp(temp2);
-    }
+    // TODO(allen): this part seems especially weird now.
+    // We want these to be effected by evals of the config system,
+    // not by a state that gets evaled and saved *now*!!
     
     // Apply config
-    setup_built_in_mapping(app, config->mapping, &framework_mapping, mapid_global, mapid_file, mapid_code);
-    change_mode(app, config->mode);
-    global_set_setting(app, GlobalSetting_LAltLCtrlIsAltGr, config->lalt_lctrl_is_altgr);
+    String_Const_u8 mode = def_get_config_string(scratch, vars_save_string_lit("mode"));
+    change_mode(app, mode);
     
-    Color_Table *colors = get_color_table_by_name(config->default_theme_name);
+    b32 lalt_lctrl_is_altgr = def_get_config_b32(vars_save_string_lit("lalt_lctrl_is_altgr"));
+    global_set_setting(app, GlobalSetting_LAltLCtrlIsAltGr, lalt_lctrl_is_altgr);
+    
+    String_Const_u8 default_theme_name = def_get_config_string(scratch, vars_save_string_lit("default_theme_name"));
+    Color_Table *colors = get_color_table_by_name(default_theme_name);
     set_active_color(colors);
     
     Face_Description description = {};
@@ -1630,17 +1531,34 @@ load_config_and_apply(Application_Links *app, Arena *out_arena, Config_Data *con
         description.parameters.pt_size = override_font_size;
     }
     else{
-        description.parameters.pt_size = config->default_font_size;
+        description.parameters.pt_size = (i32)def_get_config_u64(app, vars_save_string_lit("default_font_size"));
     }
-    description.parameters.hinting = config->default_font_hinting || override_hinting;
-     
-    description.font.file_name = config->default_font_name;
+    if (description.parameters.pt_size == 0){
+        description.parameters.pt_size = 12;
+    }
+    
+    b32 default_font_hinting = def_get_config_b32(vars_save_string_lit("default_font_hinting"));
+    description.parameters.hinting = default_font_hinting || override_hinting;
+    
+    Face_Antialiasing_Mode aa_mode = FaceAntialiasingMode_8BitMono;
+    String8 aa_mode_string = def_get_config_string(scratch, vars_save_string_lit("default_font_aa_mode"));
+    if (string_match(aa_mode_string, str8_lit("8bit"))){
+        aa_mode = FaceAntialiasingMode_8BitMono;
+    }
+    else if (string_match(aa_mode_string, str8_lit("1bit"))){
+        aa_mode = FaceAntialiasingMode_1BitMono;
+    }
+    description.parameters.aa_mode = aa_mode;
+    
+    description.font.file_name = default_font_name;
     if (!modify_global_face_by_description(app, description)){
-        description.font.file_name = get_file_path_in_fonts_folder(scratch, config->default_font_name);
+        String8 name_in_fonts_folder = push_u8_stringf(scratch, "fonts/%.*s", string_expand(default_font_name));
+        description.font.file_name = def_search_normal_full_path(scratch, name_in_fonts_folder);
         modify_global_face_by_description(app, description);
     }
     
-    if (config->bind_by_physical_key){
+    b32 bind_by_physical_key = def_get_config_b32(vars_save_string_lit("bind_by_physical_key"));
+    if (bind_by_physical_key){
         system_set_key_mode(KeyMode_Physical);
     }
     else{
@@ -1664,6 +1582,31 @@ load_theme_file_into_live_set(Application_Links *app, char *file_name){
     }
     save_theme(color_table, name);
 }
+
+function void
+load_folder_of_themes_into_live_set(Application_Links *app, String_Const_u8 path){
+    Scratch_Block scratch(app);
+    
+    File_List list = system_get_file_list(scratch, path);
+    for (File_Info **ptr = list.infos, **end = list.infos + list.count;
+         ptr < end;
+         ptr += 1){
+        File_Info *info = *ptr;
+        if (!HasFlag(info->attributes.flags, FileAttribute_IsDirectory)){
+            String_Const_u8 name = info->file_name;
+            if (string_match(string_postfix(name, 7), str8_lit(".4coder"))){
+                Temp_Memory_Block temp(scratch);
+                String_Const_u8 full_name = push_u8_stringf(scratch, "%.*s/%.*s",
+                                                            string_expand(path),
+                                                            string_expand(name));
+                load_theme_file_into_live_set(app, (char*)full_name.str);
+            }
+        }
+    }
+}
+
+////////////////////////////////
+// NOTE(allen): Commands
 
 CUSTOM_COMMAND_SIG(load_theme_current_buffer)
 CUSTOM_DOC("Parse the current buffer as a theme file and add the theme to the theme list. If the buffer has a .4coder postfix in it's name, it is removed when the name is saved.")
@@ -1709,24 +1652,15 @@ CUSTOM_DOC("Parse the current buffer as a theme file and add the theme to the th
     }
 }
 
-function void
-load_folder_of_themes_into_live_set(Application_Links *app, String_Const_u8 path){
+CUSTOM_COMMAND_SIG(go_to_user_directory)
+CUSTOM_DOC("Go to the 4coder user directory")
+{
     Scratch_Block scratch(app);
-    
-    File_List list = system_get_file_list(scratch, path);
-    for (File_Info **ptr = list.infos, **end = list.infos + list.count;
-         ptr < end;
-         ptr += 1){
-        File_Info *info = *ptr;
-        if (!HasFlag(info->attributes.flags, FileAttribute_IsDirectory)){
-            String_Const_u8 name = info->file_name;
-            Temp_Memory_Block temp(scratch);
-            String_Const_u8 full_name = push_u8_stringf(scratch, "%.*s/%.*s",
-                                                        string_expand(path),
-                                                        string_expand(name));
-            load_theme_file_into_live_set(app, (char*)full_name.str);
-        }
-    }
+    String_Const_u8 hot = push_hot_directory(app, scratch);
+    String8 user_4coder_path = system_get_path(scratch, SystemPath_UserDirectory);
+    String8 cmd = push_u8_stringf(scratch, "mkdir \"%.*s\"", string_expand(user_4coder_path));
+    exec_system_command(app, 0, buffer_identifier(0), hot, cmd, 0);
+    set_hot_directory(app, user_4coder_path);
 }
 
 // BOTTOM

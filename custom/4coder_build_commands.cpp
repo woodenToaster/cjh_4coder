@@ -21,21 +21,21 @@ push_build_directory_at_file(Application_Links *app, Arena *arena, Buffer_ID buf
 #if OS_WINDOWS
 
 global String_Const_u8 standard_build_file_name_array[] = {
-    string_u8_litinit("build.bat"),
+    str8_lit("build.bat"),
 };
 global String_Const_u8 standard_build_cmd_string_array[] = {
-    string_u8_litinit("build"),
+    str8_lit("build"),
 };
 
 #elif OS_LINUX || OS_MAC
 
 global String_Const_u8 standard_build_file_name_array[] = {
-    string_u8_litinit("build.sh"),
-    string_u8_litinit("Makefile"),
+    str8_lit("build.sh"),
+    str8_lit("Makefile"),
 };
 global String_Const_u8 standard_build_cmd_string_array[] = {
-    string_u8_litinit("build.sh"),
-    string_u8_litinit("make"),
+    str8_lit("build.sh"),
+    str8_lit("make"),
 };
 
 #else
@@ -85,7 +85,8 @@ standard_search_and_build_from_dir(Application_Links *app, View_ID view, String_
         String_Const_u8 command = push_u8_stringf(scratch, "\"%.*s/%.*s\"",
                                                   string_expand(path),
                                                   string_expand(cmd_string));
-        if (global_config.automatically_save_changes_on_build){
+        b32 auto_save = def_get_config_b32(vars_save_string_lit("automatically_save_changes_on_build"));
+        if (auto_save){
             save_all_dirty_buffers(app);
         }
         standard_build_exec_command(app, view, path, command);
@@ -149,10 +150,10 @@ get_or_open_build_panel(Application_Links *app){
 
 function void
 set_fancy_compilation_buffer_font(Application_Links *app){
+    Scratch_Block scratch(app);
     Buffer_ID buffer = get_comp_buffer(app);
     Font_Load_Location font = {};
-    Scratch_Block scratch(app);
-    font.file_name = get_file_path_in_fonts_folder(scratch, string_u8_litexpr("Inconsolata-Regular.ttf"));
+    font.file_name = def_search_normal_full_path(scratch, str8_lit("fonts/Inconsolata-Regular.ttf"));
     set_buffer_face_by_font_load_location(app, buffer, &font);
 }
 

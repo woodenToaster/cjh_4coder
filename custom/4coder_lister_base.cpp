@@ -194,10 +194,11 @@ lister_render(Application_Links *app, Frame_Info frame_info, View_ID view){
     f32 text_field_height = lister_get_text_field_height(line_height);
     
     // NOTE(allen): file bar
+    // TODO(allen): What's going on with 'showing_file_bar'? I found it like this.
     b64 showing_file_bar = false;
+    b32 hide_file_bar_in_ui = def_get_config_b32(vars_save_string_lit("hide_file_bar_in_ui"));
     if (view_get_setting(app, view, ViewSetting_ShowFileBar, &showing_file_bar) &&
-        showing_file_bar &&
-        !global_config.hide_file_bar_in_ui){
+        showing_file_bar && !hide_file_bar_in_ui){
         Rect_f32_Pair pair = layout_file_bar_on_top(region, line_height);
         Buffer_ID buffer = view_get_buffer(app, view, Access_Always);
         draw_file_bar(app, view, buffer, face_id, pair.min);
@@ -320,7 +321,8 @@ lister_render(Application_Links *app, Frame_Info frame_info, View_ID view){
             highlight = UIHighlight_Hover;
         }
         
-        f32 roundness = block_height*global_config.lister_roundness;
+        u64 lister_roundness_100 = def_get_config_u64(app, vars_save_string_lit("lister_roundness"));
+        f32 roundness = block_height*lister_roundness_100*0.01f;
         draw_rectangle_fcolor(app, item_rect, roundness, get_item_margin_color(highlight));
         draw_rectangle_fcolor(app, item_inner, roundness, get_item_margin_color(highlight, 1));
         
@@ -480,9 +482,9 @@ lister_user_data_at_p(Application_Links *app, View_ID view, Lister *lister, Vec2
     f32 text_field_height = lister_get_text_field_height(line_height);
     
     b64 showing_file_bar = false;
+    b32 hide_file_bar_in_ui = def_get_config_b32(vars_save_string_lit("hide_file_bar_in_ui"));
     if (view_get_setting(app, view, ViewSetting_ShowFileBar, &showing_file_bar) &&
-        showing_file_bar &&
-        !global_config.hide_file_bar_in_ui){
+        showing_file_bar && hide_file_bar_in_ui){
         Rect_f32_Pair pair = layout_file_bar_on_top(region, line_height);
         region = pair.max;
     }

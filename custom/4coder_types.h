@@ -500,12 +500,20 @@ struct Font_Load_Location{
 };
 
 api(custom)
+typedef u32 Face_Antialiasing_Mode;
+enum{
+    FaceAntialiasingMode_8BitMono,
+    FaceAntialiasingMode_1BitMono,
+};
+
+api(custom)
 struct Face_Load_Parameters{
     u32 pt_size;
-    b32 bold;
-    b32 italic;
-    b32 underline;
-    b32 hinting;
+    Face_Antialiasing_Mode aa_mode;
+    b8 bold;
+    b8 italic;
+    b8 underline;
+    b8 hinting;
 };
 
 api(custom)
@@ -786,5 +794,13 @@ struct Process_State{
     b32 is_updating;
     i64 return_code;
 };
+
+////////////////////////////////
+
+// NOTE(allen): buffers are allocate with:
+// array_count = channel_count*sample_count
+// channel_count = 2
+typedef void Audio_Mix_Sources_Function(void *ctx, f32 *buffer, u32 sample_count);
+typedef void Audio_Mix_Destination_Function(i16 *dst, f32 *src, u32 sample_count);
 
 #endif

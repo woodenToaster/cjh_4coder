@@ -28,9 +28,11 @@ CUSTOM_ID(attachment, attachment_tokens);
 
 ////////////////////////////////
 
+#if 0
 CUSTOM_ID(command_map, mapid_global);
 CUSTOM_ID(command_map, mapid_file);
 CUSTOM_ID(command_map, mapid_code);
+#endif
 
 CUSTOM_ID(command_map, cjh_mapid_buffer);
 CUSTOM_ID(command_map, cjh_mapid_c);
@@ -98,15 +100,17 @@ global i32 fcoder_mode = FCoderMode_Original;
 
 global ID_Pos_Jump_Location prev_location = {};
 
+global Arena global_permanent_arena = {};
 
 global Arena global_config_arena = {};
-global Config_Data global_config = {};
 
 global char previous_isearch_query[256] = {};
 
 global Mapping framework_mapping = {};
 
 global Buffer_Modified_Set global_buffer_modified_set = {};
+
+global b32 def_enable_virtual_whitespace = false;
 
 ////////////////////////////////
 

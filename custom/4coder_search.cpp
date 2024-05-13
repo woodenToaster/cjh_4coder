@@ -294,12 +294,11 @@ word_complete_list_extend_from_raw(Application_Links *app, Arena *arena, String_
          node != 0;
          node = node->next){
         String_Const_u8 s = push_buffer_range(app, scratch, node->buffer, node->range);
-        Data data = make_data(s.str, s.size);
-        Table_Lookup lookup = table_lookup(used_table, data);
+        Table_Lookup lookup = table_lookup(used_table, s);
         if (!lookup.found_match){
-            data = push_data_copy(arena, data);
+            String_Const_u8 data = push_data_copy(arena, s);
             table_insert(used_table, data, 1);
-            string_list_push(arena, list, SCu8(data.data, data.size));
+            string_list_push(arena, list, data);
         }
     }
 }
@@ -340,7 +339,7 @@ word_complete_iter_init(Buffer_ID buffer, Range_i64 range, Word_Complete_Iterato
         Arena *arena = iter->arena;
         Scratch_Block scratch(app, arena);
         String_Const_u8 needle = push_buffer_range(app, scratch, buffer, range);
-        word_complete_iter_init__inner(buffer, needle, range, iter);
+        word_complete_iter_init__inner(buffer, needle, range, iter); 
     }
 }
 

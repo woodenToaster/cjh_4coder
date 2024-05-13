@@ -132,18 +132,14 @@ get_view_for_locked_jump_buffer(Application_Links *app){
 
 ////////////////////////////////
 
+// TODO(allen): re-evaluate the setup of this.
 function void
 new_view_settings(Application_Links *app, View_ID view){
-    if (!global_config.use_scroll_bars){
-        view_set_setting(app, view, ViewSetting_ShowScrollbar, false);
-    }
-    if (!global_config.use_file_bars){
-        view_set_setting(app, view, ViewSetting_ShowFileBar, false);
-    }
+    b32 use_file_bars = def_get_config_b32(vars_save_string_lit("use_file_bars"));
+    view_set_setting(app, view, ViewSetting_ShowFileBar, use_file_bars);
 }
 
 ////////////////////////////////
-
 
 function void
 view_set_passive(Application_Links *app, View_ID view_id, b32 value){
@@ -509,19 +505,25 @@ CUSTOM_DOC("Sets the edit mode to Notepad like.")
 CUSTOM_COMMAND_SIG(toggle_highlight_line_at_cursor)
 CUSTOM_DOC("Toggles the line highlight at the cursor.")
 {
-    global_config.highlight_line_at_cursor = !global_config.highlight_line_at_cursor;
+    String_ID key = vars_save_string_lit("highlight_line_at_cursor");
+    b32 val = def_get_config_b32(key);
+    def_set_config_b32(key, !val);
 }
 
 CUSTOM_COMMAND_SIG(toggle_highlight_enclosing_scopes)
 CUSTOM_DOC("In code files scopes surrounding the cursor are highlighted with distinguishing colors.")
 {
-    global_config.use_scope_highlight = !global_config.use_scope_highlight;
+    String_ID key = vars_save_string_lit("use_scope_highlight");
+    b32 val = def_get_config_b32(key);
+    def_set_config_b32(key, !val);
 }
 
 CUSTOM_COMMAND_SIG(toggle_paren_matching_helper)
 CUSTOM_DOC("In code files matching parentheses pairs are colored with distinguishing colors.")
 {
-    global_config.use_paren_helper = !global_config.use_paren_helper;
+    String_ID key = vars_save_string_lit("use_paren_helper");
+    b32 val = def_get_config_b32(key);
+    def_set_config_b32(key, !val);
 }
 
 CUSTOM_COMMAND_SIG(toggle_fullscreen)
@@ -537,9 +539,16 @@ CUSTOM_DOC("Loads all the theme files in the default theme folder.")
     save_all_dirty_buffers_with_postfix(app, fcoder_extension);
     
     Scratch_Block scratch(app);
-    String_Const_u8 bin_path = system_get_path(scratch, SystemPath_Binary);
-    String_Const_u8 path = push_u8_stringf(scratch, "%.*sthemes", string_expand(bin_path));
-    load_folder_of_themes_into_live_set(app, path);
+    String8List list = {};
+    def_search_normal_load_list(scratch, &list);
+    
+    for (String8Node *node = list.first;
+         node != 0;
+         node = node->next){
+        String8 folder_path = node->string;
+        String8 themes_path = push_u8_stringf(scratch, "%.*sthemes", string_expand(folder_path));
+        load_folder_of_themes_into_live_set(app, themes_path);
+    }
 }
 
 CUSTOM_COMMAND_SIG(load_themes_hot_directory)
@@ -570,8 +579,32 @@ CUSTOM_DOC("Clear the theme list")
 ////////////////////////////////
 
 function void
-default_4coder_initialize(Application_Links *app, String_Const_u8_Array file_names,
-                          i32 override_font_size, b32 override_hinting){
+setup_essential_mapping(Mapping *mapping, i64 global_id, i64 file_id, i64 code_id){
+    MappingScope();
+    SelectMapping(mapping);
+    
+    SelectMap(global_id);
+    BindCore(default_startup, CoreCode_Startup);
+    BindCore(default_try_exit, CoreCode_TryExit);
+    BindCore(clipboard_record_clip, CoreCode_NewClipboardContents);
+    BindMouseWheel(mouse_wheel_scroll);
+    BindMouseWheel(mouse_wheel_change_face_size, KeyCode_Control);
+    
+    SelectMap(file_id);
+    ParentMap(global_id);
+    BindTextInput(write_text_input);
+    BindMouse(click_set_cursor_and_mark, MouseCode_Left);
+    BindMouseRelease(click_set_cursor, MouseCode_Left);
+    BindCore(click_set_cursor_and_mark, CoreCode_ClickActivateView);
+    BindMouseMove(click_set_cursor_if_lbutton);
+    
+    SelectMap(code_id);
+    ParentMap(file_id);
+    BindTextInput(write_text_and_auto_indent);
+}
+
+function void
+default_4coder_initialize(Application_Links *app, String_Const_u8_Array file_names, i32 override_font_size, b32 override_hinting){
 #define M \
 "Welcome to " VERSION "\n" \
 "If you're new to 4coder there is a built in tutorial\n" \
@@ -587,10 +620,33 @@ default_4coder_initialize(Application_Links *app, String_Const_u8_Array file_nam
     print_message(app, string_u8_litexpr(M));
 #undef M
     
-    load_config_and_apply(app, &global_config_arena, &global_config, override_font_size, override_hinting);
+    Scratch_Block scratch(app);
+    
+    load_config_and_apply(app, &global_config_arena, override_font_size, override_hinting);
+    
+    String_Const_u8 bindings_file_name = string_u8_litexpr("bindings.4coder");
+    String_Const_u8 mapping = def_get_config_string(scratch, vars_save_string_lit("mapping"));
+    
+    if (string_match(mapping, string_u8_litexpr("mac-default"))){
+        bindings_file_name = string_u8_litexpr("mac-bindings.4coder");
+    }
+    else if (OS_MAC && string_match(mapping, string_u8_litexpr("choose"))){
+        bindings_file_name = string_u8_litexpr("mac-bindings.4coder");
+    }
+    
+    // TODO(allen): cleanup
+    String_ID global_map_id = vars_save_string_lit("keys_global");
+    String_ID file_map_id = vars_save_string_lit("keys_file");
+    String_ID code_map_id = vars_save_string_lit("keys_code");
+    
+    if (dynamic_binding_load_from_file(app, &framework_mapping, bindings_file_name)){
+        setup_essential_mapping(&framework_mapping, global_map_id, file_map_id, code_map_id);
+    }
+    else{
+        setup_built_in_mapping(app, mapping, &framework_mapping, global_map_id, file_map_id, code_map_id);
+    }
     
     // open command line files
-    Scratch_Block scratch(app);
     String_Const_u8 hot_directory = push_hot_directory(app, scratch);
     for (i32 i = 0; i < file_names.count; i += 1){
         Temp_Memory_Block temp(scratch);
@@ -606,8 +662,7 @@ default_4coder_initialize(Application_Links *app, String_Const_u8_Array file_nam
 }
 
 function void
-default_4coder_initialize(Application_Links *app,
-                          i32 override_font_size, b32 override_hinting){
+default_4coder_initialize(Application_Links *app, i32 override_font_size, b32 override_hinting){
     String_Const_u8_Array file_names = {};
     default_4coder_initialize(app, file_names, override_font_size, override_hinting);
 }
@@ -969,6 +1024,7 @@ default_framework_init(Application_Links *app){
     initialize_managed_id_metadata(app);
     set_default_color_scheme(app);
     heap_init(&global_heap, tctx->allocator);
+	global_permanent_arena = make_arena_system();
     global_config_arena = make_arena_system();
     fade_range_arena = make_arena_system(KB(8));
 }
@@ -987,7 +1043,7 @@ default_input_handler_init(Application_Links *app, Arena *arena){
     
     View_Context ctx = view_current_context(app, view);
     ctx.mapping = &framework_mapping;
-    ctx.map_id = mapid_global;
+    ctx.map_id = vars_save_string_lit("keys_global");
     view_alter_context(app, view, &ctx);
 }
 
@@ -999,12 +1055,12 @@ default_get_map_id(Application_Links *app, View_ID view){
     Command_Map_ID *result_ptr = scope_attachment(app, buffer_scope, buffer_map_id, Command_Map_ID);
     if (result_ptr != 0){
         if (*result_ptr == 0){
-            *result_ptr = mapid_file;
+            *result_ptr = vars_save_string_lit("keys_file");
         }
         result = *result_ptr;
     }
     else{
-        result = mapid_global;
+        result = vars_save_string_lit("keys_global");
     }
     return(result);
 }
@@ -1013,7 +1069,9 @@ function void
 set_next_rewrite(Application_Links *app, View_ID view, Rewrite_Type rewrite){
     Managed_Scope scope = view_get_managed_scope(app, view);
     Rewrite_Type *next_rewrite = scope_attachment(app, scope, view_next_rewrite_loc, Rewrite_Type);
-    *next_rewrite = rewrite;
+    if (next_rewrite != 0){
+        *next_rewrite = rewrite;
+    }
 }
 
 function void

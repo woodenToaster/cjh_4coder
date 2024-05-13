@@ -192,14 +192,16 @@ CUSTOM_COMMAND_SIG(backspace_alpha_numeric_boundary)
 CUSTOM_DOC("Delete characters between the cursor position and the first alphanumeric boundary to the left.")
 {
     Scratch_Block scratch(app);
-    current_view_boundary_delete(app, Scan_Backward, push_boundary_list(scratch, boundary_alpha_numeric));
+    current_view_boundary_delete(app, Scan_Backward,
+                                 push_boundary_list(scratch, boundary_alpha_numeric_unicode));
 }
 
 CUSTOM_COMMAND_SIG(delete_alpha_numeric_boundary)
 CUSTOM_DOC("Delete characters between the cursor position and the first alphanumeric boundary to the right.")
 {
     Scratch_Block scratch(app);
-    current_view_boundary_delete(app, Scan_Forward, push_boundary_list(scratch, boundary_alpha_numeric));
+    current_view_boundary_delete(app, Scan_Forward,
+                                 push_boundary_list(scratch, boundary_alpha_numeric_unicode));
 }
 
 function void
@@ -862,7 +864,9 @@ CUSTOM_DOC("Toggles the current buffer's whitespace visibility status.")
 CUSTOM_COMMAND_SIG(toggle_line_numbers)
 CUSTOM_DOC("Toggles the left margin line numbers.")
 {
-    global_config.show_line_number_margins = !global_config.show_line_number_margins;
+    String_ID key = vars_save_string_lit("show_line_number_margins");
+    b32 val = def_get_config_b32(key);
+    def_set_config_b32(key, !val);
 }
 
 CUSTOM_COMMAND_SIG(toggle_line_wrap)
@@ -1608,50 +1612,6 @@ CUSTOM_DOC("Delete the line the on which the cursor sits.")
 
 ////////////////////////////////
 
-function b32
-get_cpp_matching_file(Application_Links *app, Buffer_ID buffer, Buffer_ID *buffer_out){
-    b32 result = false;
-    Scratch_Block scratch(app);
-    String_Const_u8 file_name = push_buffer_file_name(app, scratch, buffer);
-    if (file_name.size > 0){
-        String_Const_u8 extension = string_file_extension(file_name);
-        String_Const_u8 new_extensions[2] = {};
-        i32 new_extensions_count = 0;
-        if (string_match(extension, string_u8_litexpr("cpp")) || string_match(extension, string_u8_litexpr("cc"))){
-            new_extensions[0] = string_u8_litexpr("h");
-            new_extensions[1] = string_u8_litexpr("hpp");
-            new_extensions_count = 2;
-        }
-        else if (string_match(extension, string_u8_litexpr("c"))){
-            new_extensions[0] = string_u8_litexpr("h");
-            new_extensions_count = 1;
-        }
-        else if (string_match(extension, string_u8_litexpr("h"))){
-            new_extensions[0] = string_u8_litexpr("c");
-            new_extensions[1] = string_u8_litexpr("cpp");
-            new_extensions_count = 2;
-        }
-        else if (string_match(extension, string_u8_litexpr("hpp"))){
-            new_extensions[0] = string_u8_litexpr("cpp");
-            new_extensions_count = 1;
-        }
-        
-        String_Const_u8 file_without_extension = string_file_without_extension(file_name);
-        for (i32 i = 0; i < new_extensions_count; i += 1){
-            Temp_Memory temp = begin_temp(scratch);
-            String_Const_u8 new_extension = new_extensions[i];
-            String_Const_u8 new_file_name = push_u8_stringf(scratch, "%.*s.%.*s", string_expand(file_without_extension), string_expand(new_extension));
-            if (open_file(app, buffer_out, new_file_name, false, true)){
-                result = true;
-                break;
-            }
-            end_temp(temp);
-        }
-    }
-    
-    return(result);
-}
-
 CUSTOM_COMMAND_SIG(open_file_in_quotes)
 CUSTOM_DOC("Reads a filename from surrounding '\"' characters and attempts to open the corresponding file.")
 {
@@ -1682,6 +1642,57 @@ CUSTOM_DOC("Reads a filename from surrounding '\"' characters and attempts to op
             }
         }
     }
+}
+
+function b32
+get_cpp_matching_file(Application_Links *app, Buffer_ID buffer, Buffer_ID *buffer_out){
+    b32 result = false;
+    Scratch_Block scratch(app);
+    String_Const_u8 file_name = push_buffer_file_name(app, scratch, buffer);
+    if (file_name.size > 0){
+        String_Const_u8 extension = string_file_extension(file_name);
+        String_Const_u8 new_extensions[2] = {};
+        i32 new_extensions_count = 0;
+        if (string_match(extension, string_u8_litexpr("cpp")) || string_match(extension, string_u8_litexpr("cc"))){
+            new_extensions[0] = string_u8_litexpr("h");
+            new_extensions[1] = string_u8_litexpr("hpp");
+            new_extensions_count = 2;
+        }
+        else if (string_match(extension, string_u8_litexpr("c"))){
+            new_extensions[0] = string_u8_litexpr("h");
+            new_extensions_count = 1;
+        }
+        else if (string_match(extension, string_u8_litexpr("h"))){
+            new_extensions[0] = string_u8_litexpr("cpp");
+            new_extensions[1] = string_u8_litexpr("c");
+            new_extensions_count = 2;
+        }
+        else if (string_match(extension, string_u8_litexpr("hpp"))){
+            new_extensions[0] = string_u8_litexpr("cpp");
+            new_extensions_count = 1;
+        }
+        
+        String_Const_u8 file_without_extension = string_file_without_extension(file_name);
+        for (i32 i = 0; i < new_extensions_count; i += 1){
+            Temp_Memory temp = begin_temp(scratch);
+            String_Const_u8 new_extension = new_extensions[i];
+            String_Const_u8 new_file_name = push_u8_stringf(scratch, "%.*s.%.*s", string_expand(file_without_extension), string_expand(new_extension));
+            if (open_file(app, buffer_out, new_file_name, false, true)){
+                result = true;
+                break;
+            }
+            end_temp(temp);
+        }
+        
+        if (!result && new_extensions_count > 0){
+            String_Const_u8 new_file_name = push_u8_stringf(scratch, "%.*s.%.*s", string_expand(file_without_extension), string_expand(new_extensions[0]));
+            if (open_file(app, buffer_out, new_file_name, false, false)){
+                result = true;
+            }
+        }
+    }
+    
+    return(result);
 }
 
 CUSTOM_COMMAND_SIG(open_matching_file_cpp)
@@ -1873,7 +1884,8 @@ CUSTOM_DOC("Advances backwards through the undo history of the current buffer.")
         
         b32 do_immedite_undo = true;
         f32 undo_fade_time = 0.33f;
-        if (global_config.enable_undo_fade_out &&
+        b32 enable_undo_fade_out = def_get_config_b32(vars_save_string_lit("enable_undo_fade_out"));
+        if (enable_undo_fade_out &&
             undo_fade_time > 0.f &&
             record.kind == RecordKind_Single &&
             record.single_string_backward.size == 0){

@@ -9,7 +9,7 @@
 
 struct File_Name_Data{
     String_Const_u8 file_name;
-    Data data;
+    String_Const_u8 data;
 };
 
 struct View_Context_Block{
@@ -105,6 +105,13 @@ global Character_Predicate character_predicate_non_whitespace = { {
 global Character_Predicate character_predicate_utf8_byte = { {
         0,   0,   0,   0,   0,   0,   0,   0, 
         0,   0,   0,   0,   0,   0,   0,   0, 
+        255, 255, 255, 255, 255, 255, 255, 255, 
+        255, 255, 255, 255, 255, 255, 255, 255, 
+    } };
+
+global Character_Predicate character_predicate_alpha_numeric_utf8 = { {
+        0,   0,   0,   0,   0,   0, 255,   3, 
+        254, 255, 255,   7, 254, 255, 255,   7, 
         255, 255, 255, 255, 255, 255, 255, 255, 
         255, 255, 255, 255, 255, 255, 255, 255, 
     } };

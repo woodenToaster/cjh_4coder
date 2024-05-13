@@ -258,6 +258,7 @@ get_indentation_array(Application_Links *app, Arena *arena, Buffer_ID buffer, Ra
                         nest->indent = (token->pos - line_cache.indent_info.first_char_pos) + 1;
                         following_indent = nest->indent;
                         shift_by_actual_indent = true;
+                        ignore_unfinished_statement = true;
                     }break;
                     
                     case TokenBaseKind_ParentheticalClose:
@@ -389,10 +390,12 @@ auto_indent_buffer(Application_Links *app, Buffer_ID buffer, Range_i64 pos, Inde
 
 function void
 auto_indent_buffer(Application_Links *app, Buffer_ID buffer, Range_i64 pos, Indent_Flag flags){
-    i32 indent_width = global_config.indent_width;
-    i32 tab_width = global_config.default_tab_width;
+    i32 indent_width = (i32)def_get_config_u64(app, vars_save_string_lit("indent_width"));
+    i32 tab_width = (i32)def_get_config_u64(app, vars_save_string_lit("default_tab_width"));
+    tab_width = clamp_bot(1, tab_width);
     AddFlag(flags, Indent_FullTokens);
-    if (global_config.indent_with_tabs){
+    b32 indent_with_tabs = def_get_config_b32(vars_save_string_lit("indent_with_tabs"));
+    if (indent_with_tabs){
         AddFlag(flags, Indent_UseTab);
     }
     auto_indent_buffer(app, buffer, pos, flags, indent_width, tab_width);

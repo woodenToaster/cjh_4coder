@@ -31,6 +31,19 @@ get_command_metadata(Custom_Command_Function *func){
     return(result);
 }
 
+function Command_Metadata*
+get_command_metadata_from_name(String_Const_u8 name){
+    Command_Metadata *result = 0;
+    Command_Metadata *candidate = fcoder_metacmd_table;
+    for (i32 i = 0; i < ArrayCount(fcoder_metacmd_table); i += 1, candidate += 1){
+        if (string_match(SCu8(candidate->name, candidate->name_len), name)){
+            result = candidate;
+            break;
+        }
+    }
+    return(result);
+}
+
 ////////////////////////////////
 
 function Token_Array
@@ -360,7 +373,7 @@ get_line_start_pos(Application_Links *app, Buffer_ID buffer, i64 line_number){
     return(get_line_side_pos(app, buffer, line_number, Side_Min));
 }
 
-// NOTE(allen): The position returned has the index of the terminating newline character,
+// NOTE(allen): The position returned has the index of the terminating LF.
 // not one past the newline character.
 function Buffer_Cursor
 get_line_end(Application_Links *app, Buffer_ID buffer, i64 line_number){
@@ -371,7 +384,7 @@ get_line_end_pos(Application_Links *app, Buffer_ID buffer, i64 line_number){
     return(get_line_side_pos(app, buffer, line_number, Side_Max));
 }
 
-// NOTE(allen): The range returned does not include the terminating newline character
+// NOTE(allen): The range returned does not include the terminating LF or CRLF
 function Range_Cursor
 get_line_range(Application_Links *app, Buffer_ID buffer, i64 line_number){
     b32 success = false;
@@ -389,7 +402,7 @@ get_line_range(Application_Links *app, Buffer_ID buffer, i64 line_number){
     return(result);
 }
 
-// NOTE(allen): The range returned does not include the terminating newline character
+// NOTE(allen): The range returned does not include the terminating LF or CRLF
 function Range_i64
 get_line_pos_range(Application_Links *app, Buffer_ID buffer, i64 line_number){
     Range_Cursor range = get_line_range(app, buffer, line_number);
@@ -552,7 +565,7 @@ boundary_alpha_numeric(Application_Links *app, Buffer_ID buffer, Side side, Scan
 
 function i64
 boundary_alpha_numeric_unicode(Application_Links *app, Buffer_ID buffer, Side side, Scan_Direction direction, i64 pos){
-    return(boundary_predicate(app, buffer, side, direction, pos, &character_predicate_alpha_numeric_underscore_utf8));
+    return(boundary_predicate(app, buffer, side, direction, pos, &character_predicate_alpha_numeric_utf8));
 }
 
 function i64
@@ -1012,7 +1025,18 @@ push_token_lexeme(Application_Links *app, Arena *arena, Buffer_ID buffer, Token 
 
 function String_Const_u8
 push_buffer_line(Application_Links *app, Arena *arena, Buffer_ID buffer, i64 line_number){
-    return(push_buffer_range(app, arena, buffer, get_line_pos_range(app, buffer, line_number)));
+    // NOTE(allen): 4coder flaw
+    // The system for dealing with CRLF vs LF is too sloppy. There is no way to
+    // avoid returning the CR from this function by adjusting the more
+    // fundamental position getter functions without risking breaking some of
+    // the users of those functions. It seems okay to just chop the CR
+    // off here - but it's clearly sloppy. Oh well - we're in duct tape mode
+    // these days anyways.
+    String_Const_u8 string = push_buffer_range(app, arena, buffer, get_line_pos_range(app, buffer, line_number));
+    for (;string.size > 0 && string.str[string.size - 1] == '\r';){
+        string.size -= 1;
+    }
+    return(string);
 }
 
 function String_Const_u8
@@ -1998,9 +2022,9 @@ file_exists_and_is_folder(Application_Links *app, String_Const_u8 file_name){
     return(attributes.last_write_time > 0 && HasFlag(attributes.flags, FileAttribute_IsDirectory));
 }
 
-function Data
+function String_Const_u8
 dump_file_handle(Arena *arena, FILE *file){
-    Data result = {};
+    String_Const_u8 result = {};
     if (file != 0){
         fseek(file, 0, SEEK_END);
         u64 size = ftell(file);
@@ -2034,20 +2058,6 @@ push_file_search_up_path(Application_Links *app, Arena *arena, String_Const_u8 s
         end_temp(temp);
     }
     return(result);
-}
-
-function FILE*
-open_file_try_current_path_then_binary_path(Application_Links *app, char *file_name){
-    FILE *file = fopen(file_name, "rb");
-    if (file == 0){
-        Scratch_Block scratch(app);
-        List_String_Const_u8 list = {};
-        string_list_push(scratch, &list, system_get_path(scratch, SystemPath_Binary));
-        string_list_push_overlap(scratch, &list, '/', SCu8(file_name));
-        String_Const_u8 str = string_list_flatten(scratch, list, StringFill_NullTerminate);
-        file = fopen((char*)str.str, "rb");
-    }
-    return(file);
 }
 
 function FILE*
@@ -2501,21 +2511,33 @@ exec_system_command(Application_Links *app, View_ID view, Buffer_Identifier buff
 
 ////////////////////////////////
 
+#if 0
 function f32
-font_get_glyph_advance(Face_Advance_Map *map, Face_Metrics *metrics, u32 codepoint){
-    return(font_get_glyph_advance(map, metrics, codepoint, (f32)global_config.default_tab_width));
+font_get_glyph_advance(Face_Advance_Map *map, Face_Metrics *metrics, u32 codepoint, f32 tab_width){
+    return(font_get_glyph_advance(map, metrics, codepoint, tab_width));
 }
 function f32
 font_get_max_glyph_advance_range(Face_Advance_Map *map, Face_Metrics *metrics,
-                                 u32 codepoint_first, u32 codepoint_last){
-    return(font_get_max_glyph_advance_range(map, metrics, codepoint_first, codepoint_last,
-                                            (f32)global_config.default_tab_width));
+                                 u32 codepoint_first, u32 codepoint_last, f32 tab_width){
+    return(font_get_max_glyph_advance_range(map, metrics, codepoint_first, codepoint_last, tab_width));
 }
 function f32
 font_get_average_glyph_advance_range(Face_Advance_Map *map, Face_Metrics *metrics,
-                                     u32 codepoint_first, u32 codepoint_last){
-    return(font_get_average_glyph_advance_range(map, metrics, codepoint_first, codepoint_last,
-                                                (f32)global_config.default_tab_width));
+                                     u32 codepoint_first, u32 codepoint_last, f32 tab_width){
+    return(font_get_average_glyph_advance_range(map, metrics, codepoint_first, codepoint_last, tab_width));
+}
+#endif
+
+////////////////////////////////
+// NOTE(allen): Layout Invalidate
+
+function void
+clear_all_layouts(Application_Links *app){
+    for (Buffer_ID buffer = get_buffer_next(app, 0, Access_Always);
+         buffer != 0;
+         buffer = get_buffer_next(app, buffer, Access_Always)){
+        buffer_clear_layout_cache(app, buffer);
+    }
 }
 
 // BOTTOM
